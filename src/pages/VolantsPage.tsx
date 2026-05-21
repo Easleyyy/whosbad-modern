@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { ArrowUpDown } from 'lucide-react';
 import { useSalesData, useAchats, useDeleteSale } from '@/hooks/useSales';
 import { useSalesStore } from '@/stores/salesStore';
 import { useToast } from '@/hooks/useToast';
@@ -13,6 +14,12 @@ import { ToastContainer } from '@/components/ui/Toast';
 import { filterSales, getDateRange } from '@/lib/utils';
 import { type ProductTab } from '@/types';
 
+function parseTs(dateStr: string) {
+  if (!dateStr) return 0;
+  const [dd, mm, yy] = dateStr.split('/');
+  return new Date(+yy, +mm - 1, +dd).getTime() || 0;
+}
+
 const TABS: ProductTab[] = ['Victor GM', 'Victor PC', 'CBX RED', 'CBX BLUE'];
 
 const TAB_COLORS: Record<ProductTab, string> = {
@@ -25,6 +32,7 @@ const TAB_COLORS: Record<ProductTab, string> = {
 export function VolantsPage() {
   const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
   const [aiOpen, setAiOpen] = useState(false);
+  const [sortAsc, setSortAsc] = useState(false); // false = plus récent en premier
   const { data: sales = [], isLoading } = useSalesData();
   const { data: achats = {} } = useAchats();
   const { mutate: deleteSale } = useDeleteSale();
@@ -32,10 +40,13 @@ export function VolantsPage() {
 
   const dateRange = useMemo(() => getDateRange(datePreset), [datePreset]);
 
-  const filtered = useMemo(
-    () => filterSales(sales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo),
-    [sales, filters, dateRange]
-  );
+  const filtered = useMemo(() => {
+    const base = filterSales(sales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo);
+    return [...base].sort((a, b) => {
+      const diff = parseTs(a.date) - parseTs(b.date);
+      return sortAsc ? diff : -diff;
+    });
+  }, [sales, filters, dateRange, sortAsc]);
 
   const counts = useMemo(() => ({
     all: sales.length,
@@ -83,6 +94,18 @@ export function VolantsPage() {
           onChange={(s) => setFilters({ status: s })}
           counts={counts}
         />
+      </div>
+
+      {/* Liste — en-tête avec compteur + tri */}
+      <div className="flex items-center justify-between px-4 pb-1">
+        <span className="text-xs text-gray-500">{filtered.length} vente{filtered.length !== 1 ? 's' : ''}</span>
+        <button
+          onClick={() => setSortAsc(v => !v)}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+        >
+          <ArrowUpDown className="w-3.5 h-3.5" />
+          {sortAsc ? 'Plus ancien' : 'Plus récent'}
+        </button>
       </div>
 
       {/* Sales list */}
