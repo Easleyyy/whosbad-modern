@@ -53,11 +53,34 @@ export function getAvatarColor(name: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export function filterSales(sales: Sale[], search: string, status: string): Sale[] {
+// Parse DD/MM/YYYY → timestamp
+function parseDate(dateStr: string): number {
+  if (!dateStr) return 0;
+  const [dd, mm, yy] = dateStr.split('/');
+  return new Date(+yy, +mm - 1, +dd).getTime() || 0;
+}
+
+export function filterSales(
+  sales: Sale[],
+  search: string,
+  status: string,
+  dateFrom?: string,
+  dateTo?: string
+): Sale[] {
+  const fromTs = dateFrom ? parseDate(dateFrom) : 0;
+  const toTs   = dateTo   ? parseDate(dateTo) + 86_400_000 - 1 : Infinity; // inclusive end
+
   return sales.filter((s) => {
-    if (status === 'paid' && s.paye !== 'Oui') return false;
+    if (status === 'paid'    && s.paye !== 'Oui') return false;
     if (status === 'pending' && s.paye !== 'Non') return false;
-    if (status === 'dash' && s.paye !== '-') return false;
+    if (status === 'dash'    && s.paye !== '-')   return false;
+
+    // Date range
+    if (dateFrom || dateTo) {
+      const ts = parseDate(s.date);
+      if (ts < fromTs || ts > toTs) return false;
+    }
+
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -68,4 +91,23 @@ export function filterSales(sales: Sale[], search: string, status: string): Sale
     }
     return true;
   });
+}
+
+// Retourne dateFrom/dateTo pour les périodes rapides (format DD/MM/YYYY)
+export type DatePreset = 'all' | 'today' | 'week' | 'month';
+
+export function getDateRange(preset: DatePreset): { dateFrom?: string; dateTo?: string } {
+  const fmt = (d: Date) => format(d, 'dd/MM/yyyy');
+  const today = new Date();
+  if (preset === 'today') return { dateFrom: fmt(today), dateTo: fmt(today) };
+  if (preset === 'week') {
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+    return { dateFrom: fmt(mon), dateTo: fmt(today) };
+  }
+  if (preset === 'month') {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { dateFrom: fmt(first), dateTo: fmt(today) };
+  }
+  return {};
 }

@@ -5,11 +5,12 @@ import { useToast } from '@/hooks/useToast';
 import { SaleCard } from '@/components/sales/SaleCard';
 import { SearchBar } from '@/components/sales/SearchBar';
 import { FilterPills } from '@/components/sales/FilterPills';
+import { DatePresetPills } from '@/components/sales/DatePresetPills';
 import { StatsCards } from '@/components/stats/StatsCards';
 import { AIAssistant } from '@/components/ai/AIAssistant';
 import { FAB } from '@/components/layout/FAB';
 import { ToastContainer } from '@/components/ui/Toast';
-import { filterSales } from '@/lib/utils';
+import { filterSales, getDateRange } from '@/lib/utils';
 import { type ProductTab } from '@/types';
 
 const TABS: ProductTab[] = ['Victor GM', 'Victor PC', 'CBX RED', 'CBX BLUE'];
@@ -22,16 +23,18 @@ const TAB_COLORS: Record<ProductTab, string> = {
 };
 
 export function VolantsPage() {
-  const { activeTab, filters, setActiveTab, setFilters, showAIModal: _showAIModal, setShowAIModal: _setShowAIModal } = useSalesStore();
+  const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
   const [aiOpen, setAiOpen] = useState(false);
   const { data: sales = [], isLoading } = useSalesData();
   const { data: achats = {} } = useAchats();
   const { mutate: deleteSale } = useDeleteSale();
   const { toasts, addToast, removeToast } = useToast();
 
+  const dateRange = useMemo(() => getDateRange(datePreset), [datePreset]);
+
   const filtered = useMemo(
-    () => filterSales(sales, filters.search ?? '', filters.status ?? 'all'),
-    [sales, filters]
+    () => filterSales(sales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo),
+    [sales, filters, dateRange]
   );
 
   const counts = useMemo(() => ({
@@ -72,8 +75,9 @@ export function VolantsPage() {
       </div>
 
       {/* Filters */}
-      <div className="px-4 py-3 space-y-3">
+      <div className="px-4 py-3 space-y-2.5">
         <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
+        <DatePresetPills active={datePreset} onChange={setDatePreset} />
         <FilterPills
           active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
           onChange={(s) => setFilters({ status: s })}
