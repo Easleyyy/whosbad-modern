@@ -12,8 +12,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <div className="flex flex-col h-dvh bg-surface-900 overflow-hidden">
-          {/* Main content */}
+        <div className="flex flex-col bg-surface-900 overflow-hidden" style={{ height: '100dvh' }}>
           <main className="flex-1 overflow-y-auto">
             <Routes>
               <Route path="/" element={<VolantsPage />} />

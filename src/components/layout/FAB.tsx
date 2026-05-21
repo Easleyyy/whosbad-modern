@@ -11,7 +11,8 @@ export function FAB({ onClick, label = 'Nouvelle vente' }: FABProps) {
     <motion.button
       onClick={onClick}
       whileTap={{ scale: 0.92 }}
-      className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-600/40 flex items-center justify-center"
+      className="fixed right-4 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-primary-500 to-primary-700 shadow-lg shadow-primary-600/40 flex items-center justify-center"
+      style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom, 0px))' }}
       aria-label={label}
     >
       <Plus className="w-6 h-6 text-white" />
