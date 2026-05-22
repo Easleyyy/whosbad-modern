@@ -69,6 +69,15 @@ export function useDeleteSale() {
   });
 }
 
+export function useUpdateSale() {
+  const qc = useQueryClient();
+  const { activeTab } = useSalesStore();
+  return useMutation({
+    mutationFn: (body: Record<string, unknown>) => salesApi.update(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', activeTab] }),
+  });
+}
+
 export function useAIChat() {
   const qc = useQueryClient();
   return useMutation({

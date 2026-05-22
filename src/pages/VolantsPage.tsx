@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ArrowUpDown } from 'lucide-react';
-import { useSalesData, useAchats, useDeleteSale } from '@/hooks/useSales';
+import { useSalesData, useAchats, useDeleteSale, useUpdateSale } from '@/hooks/useSales';
+import { EditSaleModal } from '@/components/sales/EditSaleModal';
 import { useSalesStore } from '@/stores/salesStore';
 import { useToast } from '@/hooks/useToast';
 import { SaleCard } from '@/components/sales/SaleCard';
@@ -33,9 +34,11 @@ export function VolantsPage() {
   const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
   const [aiOpen, setAiOpen] = useState(false);
   const [sortAsc, setSortAsc] = useState(false); // false = plus récent en premier
+  const [editSale, setEditSale] = useState<import('@/types').Sale | null>(null);
   const { data: sales = [], isLoading } = useSalesData();
   const { data: achats = {} } = useAchats();
   const { mutate: deleteSale } = useDeleteSale();
+  const { mutateAsync: updateSale, isPending: updating } = useUpdateSale();
   const { toasts, addToast, removeToast } = useToast();
 
   const dateRange = useMemo(() => getDateRange(datePreset), [datePreset]);
@@ -120,6 +123,7 @@ export function VolantsPage() {
               key={sale.id}
               sale={sale}
               index={i}
+              onEdit={(s) => setEditSale(s)}
               onDelete={(s) => {
                 if (s._row) {
                   deleteSale({ rowIndex: s._row });
@@ -130,6 +134,22 @@ export function VolantsPage() {
           ))
         )}
       </div>
+
+      {/* Edit modal */}
+      {editSale && (
+        <EditSaleModal
+          sale={editSale}
+          loading={updating}
+          onClose={() => setEditSale(null)}
+          onSave={async (body) => {
+            try {
+              await updateSale(body as Record<string, unknown>);
+              addToast(`Mis à jour : ${editSale.acheteur}`, 'success');
+              setEditSale(null);
+            } catch { addToast('Erreur lors de la mise à jour', 'error'); }
+          }}
+        />
+      )}
 
       {/* FAB */}
       <FAB onClick={() => setAiOpen(true)} />

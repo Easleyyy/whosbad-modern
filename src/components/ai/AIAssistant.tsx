@@ -28,7 +28,13 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
     try {
       const result = await sendChat(message);
       if (result.success) {
-        onSuccess(result.message ?? 'Enregistré !');
+        // Message contextuel selon l'action retournée
+        const msg = result.message ?? (
+          result.action === 'modifier' ? 'Vente(s) mise(s) à jour ✓' :
+          result.action === 'vente'    ? 'Vente(s) ajoutée(s) ✓'    :
+          'Enregistré !'
+        );
+        onSuccess(msg);
         setText('');
         reset();
         onClose();
@@ -76,7 +82,7 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
               ref={textareaRef}
               value={isListening ? transcript : text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Décris une vente... ex: 2 GM pour David payé par virement"
+              placeholder={"Vente : « 2 GM pour David payé virement »\nModif : « les 2 dernières boites de Paul sont payées »"}
               rows={4}
               className={cn(
                 'w-full bg-surface-800 border border-white/10 rounded-2xl px-4 py-3 text-white text-base',
