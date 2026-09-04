@@ -1,10 +1,6 @@
 import { TrendingUp, Package, Clock } from 'lucide-react';
 import type { Sale } from '@/types';
 
-const PRICES: Record<string, number> = {
-  'Victor GM': 22, 'Victor PC': 22, 'CBX RED': 18, 'CBX BLUE': 18,
-};
-
 interface StatsCardsProps {
   sales: Sale[];
   stockTotal: number;
@@ -15,12 +11,12 @@ export function StatsCards({ sales, stockTotal, soldTotal }: StatsCardsProps) {
   const paid = sales.filter((s) => s.paye === 'Oui');
   const pending = sales.filter((s) => s.paye === 'Non');
   const caTotal = paid.reduce((sum, s) => sum + (s.montant ?? 0), 0);
-  const pendingAmount = pending.reduce((sum, s) => sum + ((PRICES[s.produit ?? ''] ?? 22) * s.quantite), 0);
+  const pendingAmount = pending.reduce((sum, s) => sum + (s.montant ?? 0), 0);
 
   const cards = [
-    { icon: Package, label: 'Stock restant', value: `${stockTotal - soldTotal}`, sub: `${soldTotal}/${stockTotal} vendues`, color: 'text-teal-400' },
-    { icon: TrendingUp, label: 'CA encaissé', value: `${caTotal.toFixed(0)} €`, sub: `${paid.length} ventes payées`, color: 'text-success-600' },
-    { icon: Clock, label: 'En attente', value: `${pendingAmount.toFixed(0)} €`, sub: `${pending.length} ventes`, color: 'text-warning-600' },
+    { icon: Package,    label: 'Stock restant', value: `${stockTotal - soldTotal}`,   sub: `${soldTotal}/${stockTotal} vendues`,  color: 'text-teal-400' },
+    { icon: TrendingUp, label: 'CA encaissé',   value: `${caTotal.toFixed(0)} €`,     sub: `${paid.length} ventes payées`,        color: 'text-success-600' },
+    { icon: Clock,      label: 'En attente',    value: `${pendingAmount.toFixed(0)} €`, sub: `${pending.length} ventes`,           color: 'text-warning-500' },
   ];
 
   return (

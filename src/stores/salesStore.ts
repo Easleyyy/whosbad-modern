@@ -1,13 +1,13 @@
 import { create } from 'zustand';
-import type { ProductTab, SaleFilters } from '@/types';
+import type { SaleFilters } from '@/types';
 import type { DatePreset } from '@/lib/utils';
 
 interface SalesState {
-  activeTab: ProductTab;
+  activeTab: string;
   filters: SaleFilters;
   datePreset: DatePreset;
   showAIModal: boolean;
-  setActiveTab: (tab: ProductTab) => void;
+  setActiveTab: (tab: string) => void;
   setFilters: (filters: Partial<SaleFilters>) => void;
   setDatePreset: (preset: DatePreset) => void;
   setShowAIModal: (show: boolean) => void;

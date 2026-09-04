@@ -4,7 +4,20 @@ import { X, Mic, MicOff, Send, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { useAIChat } from '@/hooks/useSales';
+import { useModalGestures } from '@/hooks/useModalGestures';
+import { useReferencesStore } from '@/stores/referencesStore';
 import { cn } from '@/lib/utils';
+
+const PLACEHOLDER = [
+  'Vente : « 2 CBX RED pour Lucas, payé Square »',
+  'Stock : « reçu 20 boites Victor GM »',
+  'Réf : « nouvelle référence Yonex AS50 à 25€ »',
+  'Modif : « les boites de Paul sont payées site internet »',
+].join('\n');
+
+// Detect "nouvelle référence [name] à [price]€"
+const REF_REGEX =
+  /(?:nouvelle?\s+réf(?:érence)?|ajouter?\s+(?:une?\s+)?(?:réf(?:érence)?|boite?|volant))\s+(.+?)\s+(?:à|a|:)?\s*(\d+(?:[,\.]\d+)?)\s*€?/i;
 
 interface AIAssistantProps {
   isOpen: boolean;
@@ -17,27 +30,43 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { mutateAsync: sendChat, isPending } = useAIChat();
+  const { addReference } = useReferencesStore();
+  const { y, bind } = useModalGestures(isOpen, onClose);
 
   const { isListening, transcript, isSupported, start, stop, reset } = useVoiceInput((final) => {
     setText(final);
   });
 
   const handleSend = async () => {
-    const message = text.trim();
+    const message = (isListening ? transcript : text).trim();
     if (!message) return;
+
+    // Local: add reference
+    const refMatch = message.match(REF_REGEX);
+    if (refMatch) {
+      const name = refMatch[1].trim();
+      const price = parseFloat(refMatch[2].replace(',', '.'));
+      if (name && !isNaN(price) && price > 0) {
+        addReference({ name, price, color: 'purple' });
+        onSuccess(`Référence « ${name} » ajoutée à ${price} € !`);
+        setText(''); reset(); onClose();
+        return;
+      }
+    }
+
+    // Send to backend
     try {
       const result = await sendChat(message);
       if (result.success) {
-        // Message contextuel selon l'action retournée
         const msg = result.message ?? (
-          result.action === 'modifier' ? 'Vente(s) mise(s) à jour ✓' :
-          result.action === 'vente'    ? 'Vente(s) ajoutée(s) ✓'    :
+          result.action === 'modifier'       ? 'Vente(s) mise(s) à jour ✓'        :
+          result.action === 'vente'          ? 'Vente(s) ajoutée(s) ✓'            :
+          result.action === 'square_payment' ? 'Vente enregistrée · Square ✓'    :
+          result.action === 'stock_update'   ? 'Stock mis à jour ✓'               :
           'Enregistré !'
         );
         onSuccess(msg);
-        setText('');
-        reset();
-        onClose();
+        setText(''); reset(); onClose();
       } else {
         onError('Erreur lors de l\'envoi');
       }
@@ -45,6 +74,8 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
       onError('Erreur réseau');
     }
   };
+
+  const displayValue = isListening ? transcript : text;
 
   return (
     <AnimatePresence>
@@ -61,10 +92,13 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            style={{ y }}
             className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 rounded-t-3xl border-t border-white/10 p-6 pb-safe"
           >
             {/* Handle */}
-            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
+            <div {...bind()} className="touch-none">
+              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
+            </div>
 
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
@@ -80,9 +114,9 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
             {/* Textarea */}
             <textarea
               ref={textareaRef}
-              value={isListening ? transcript : text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={"Vente : « 2 GM pour David payé virement »\nModif : « les 2 dernières boites de Paul sont payées »"}
+              value={displayValue}
+              onChange={(e) => !isListening && setText(e.target.value)}
+              placeholder={PLACEHOLDER}
               rows={4}
               className={cn(
                 'w-full bg-surface-800 border border-white/10 rounded-2xl px-4 py-3 text-white text-base',
@@ -115,7 +149,12 @@ export function AIAssistant({ isOpen, onClose, onSuccess, onError }: AIAssistant
                   {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </button>
               )}
-              <Button onClick={handleSend} loading={isPending} disabled={!text.trim() && !transcript.trim()} className="flex-1">
+              <Button
+                onClick={handleSend}
+                loading={isPending}
+                disabled={!displayValue.trim()}
+                className="flex-1"
+              >
                 <Send className="w-4 h-4" /> Enregistrer
               </Button>
             </div>
