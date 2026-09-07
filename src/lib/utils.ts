@@ -18,6 +18,15 @@ export function formatDate(dateStr: string): string {
   }
 }
 
+const SHORT_MONTHS = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin', 'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+
+export function formatShortDate(dateStr: string): string {
+  if (!dateStr) return '—';
+  const [dd, mm] = dateStr.split('/');
+  if (!dd || !mm) return dateStr;
+  return `${+dd} ${SHORT_MONTHS[+mm - 1] ?? ''}`;
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

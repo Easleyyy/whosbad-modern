@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { ArrowUpDown, Settings2, PackagePlus } from 'lucide-react';
-import { useSalesData, useAchats, useDeleteSale, useUpdateSale } from '@/hooks/useSales';
+import { useAllSalesData, useAchats, useDeleteSale, useUpdateSale } from '@/hooks/useSales';
 import { EditSaleModal } from '@/components/sales/EditSaleModal';
 import { useSalesStore } from '@/stores/salesStore';
 import { useReferencesStore } from '@/stores/referencesStore';
@@ -10,14 +9,14 @@ import { SaleCardSkeleton } from '@/components/ui/Skeleton';
 import { SearchBar } from '@/components/sales/SearchBar';
 import { FilterPills } from '@/components/sales/FilterPills';
 import { DatePresetPills } from '@/components/sales/DatePresetPills';
-import { StatsCards } from '@/components/stats/StatsCards';
-import { AIAssistant } from '@/components/ai/AIAssistant';
+import { LedgerHeader } from '@/components/ledger/LedgerHeader';
+import { DictationBar } from '@/components/ai/DictationBar';
+import { DictationSheet } from '@/components/ai/DictationSheet';
 import { ReferenceModal } from '@/components/volants/ReferenceModal';
 import { StockModal } from '@/components/volants/StockModal';
-import { FAB } from '@/components/layout/FAB';
 import { ToastContainer } from '@/components/ui/Toast';
 import { filterSales, getDateRange } from '@/lib/utils';
-import { getColorHex, type Sale } from '@/types';
+import type { Sale } from '@/types';
 
 function parseTs(dateStr: string) {
   if (!dateStr) return 0;
@@ -25,15 +24,21 @@ function parseTs(dateStr: string) {
   return new Date(+yy, +mm - 1, +dd).getTime() || 0;
 }
 
+function stockState(qty: number) {
+  if (qty === 0) return { word: 'rupture', color: 'rgba(40,30,22,.4)' };
+  if (qty <= 8) return { word: 'à commander', color: 'oklch(0.55 0.16 28)' };
+  return { word: 'ok', color: 'rgba(40,30,22,.45)' };
+}
+
 export function VolantsPage() {
   const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
   const { references } = useReferencesStore();
-  const [aiOpen, setAiOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
   const [editSale, setEditSale] = useState<Sale | null>(null);
-  const { data: sales = [], isLoading } = useSalesData();
+  const { data: sales = [], isLoading } = useAllSalesData();
   const { data: achats = {} } = useAchats();
   const { mutate: deleteSale } = useDeleteSale();
   const { mutateAsync: updateSale, isPending: updating } = useUpdateSale();
@@ -41,157 +46,152 @@ export function VolantsPage() {
 
   const undoTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  // Ensure active tab is still valid when references change
-  useEffect(() => {
-    if (references.length > 0 && !references.find((r) => r.name === activeTab)) {
-      setActiveTab(references[0].name);
-    }
-  }, [references, activeTab, setActiveTab]);
-
-  // PWA shortcut
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('action') === 'nouvelle-vente') {
-      setAiOpen(true);
+      setSheetOpen(true);
       window.history.replaceState(null, '', '/');
     }
   }, []);
 
   const handleDelete = useCallback((sale: Sale) => {
-    if (!sale._row) return;
+    if (!sale._row || !sale.produit) return;
+    const tab = sale.produit;
+    const rowIndex = sale._row;
     const toastId = `undo-${sale.id}`;
-
-    addUndoToast(
-      `${sale.acheteur} supprimé`,
-      () => {
-        const timer = undoTimers.current.get(toastId);
-        if (timer) {
-          clearTimeout(timer);
-          undoTimers.current.delete(toastId);
-        }
-      }
-    );
-
+    addUndoToast(`${sale.acheteur} supprimé`, () => {
+      const t = undoTimers.current.get(toastId);
+      if (t) { clearTimeout(t); undoTimers.current.delete(toastId); }
+    });
     const timer = setTimeout(() => {
-      deleteSale({ rowIndex: sale._row! });
+      deleteSale({ rowIndex, tab });
       undoTimers.current.delete(toastId);
     }, 5000);
     undoTimers.current.set(toastId, timer);
   }, [deleteSale, addUndoToast]);
 
+  // ── Inventaire par modèle ──────────────────────────────────────────────
+  const models = useMemo(
+    () => references.map((ref) => {
+      const bought = achats[ref.name] ?? 0;
+      const sold = sales.filter((s) => s.produit === ref.name).reduce((n, s) => n + s.quantite, 0);
+      return { name: ref.name, stock: Math.max(0, bought - sold) };
+    }),
+    [references, achats, sales]
+  );
+
+  const kpis = useMemo(() => {
+    const stock = models.reduce((n, m) => n + m.stock, 0);
+    const sold = sales.reduce((n, s) => n + s.quantite, 0);
+    const unpaid = sales.filter((s) => s.paye === 'Non').length;
+    const cash = sales.filter((s) => s.paye === 'Oui').reduce((n, s) => n + (s.montant ?? 0), 0);
+    return [
+      { label: 'EN STOCK', value: stock },
+      { label: 'VENDU', value: sold },
+      { label: 'IMPAYÉ', value: unpaid, alert: unpaid > 0 },
+      { label: 'CAISSE', value: `${cash.toFixed(0)} €` },
+    ];
+  }, [models, sales]);
+
+  // ── Mouvements ───────────────────────────────────────────────────────
+  const modelSales = useMemo(
+    () => (activeTab ? sales.filter((s) => s.produit === activeTab) : sales),
+    [sales, activeTab]
+  );
+
   const dateRange = useMemo(() => getDateRange(datePreset), [datePreset]);
 
   const filtered = useMemo(() => {
-    const base = filterSales(sales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo);
+    const base = filterSales(modelSales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo);
     return [...base].sort((a, b) => {
       const diff = parseTs(a.date) - parseTs(b.date);
       return sortAsc ? diff : -diff;
     });
-  }, [sales, filters, dateRange, sortAsc]);
+  }, [modelSales, filters, dateRange, sortAsc]);
 
   const counts = useMemo(() => ({
-    all: sales.length,
-    paid: sales.filter((s) => s.paye === 'Oui').length,
-    pending: sales.filter((s) => s.paye === 'Non').length,
-    dash: sales.filter((s) => s.paye === '-').length,
-  }), [sales]);
-
-  const stockTotal = achats[activeTab] ?? 0;
-  const soldTotal = sales.reduce((sum, s) => sum + s.quantite, 0);
+    all: modelSales.length,
+    paid: modelSales.filter((s) => s.paye === 'Oui').length,
+    pending: modelSales.filter((s) => s.paye === 'Non').length,
+    dash: modelSales.filter((s) => s.paye === '-').length,
+  }), [modelSales]);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-2xl font-bold text-white">Who's Bad</h1>
-          <div className="flex items-center gap-1">
+    <div className="flex h-full flex-col bg-paper">
+      <LedgerHeader
+        title="Registre des volants"
+        kpis={kpis}
+        folio={sales.length ? `N° ${sales.length}` : undefined}
+        actions={[
+          { label: 'RÉASSORT', onClick: () => setStockModalOpen(true) },
+          { label: 'RÉFÉRENCES', onClick: () => setRefModalOpen(true) },
+        ]}
+      />
+
+      {/* Inventaire par modèle */}
+      <section className="flex-none px-[22px] pt-3 pb-1.5">
+        <div className="mb-1.5 font-mono text-[9px] font-medium tracking-label text-ink-45">
+          INVENTAIRE PAR MODÈLE
+        </div>
+        {models.map((m) => {
+          const state = stockState(m.stock);
+          const on = activeTab === m.name;
+          return (
             <button
-              onClick={() => setStockModalOpen(true)}
-              className="p-2 rounded-xl text-gray-400 hover:text-teal-400 hover:bg-teal-400/10 transition-colors"
-              title="Réapprovisionner le stock"
+              key={m.name}
+              onClick={() => setActiveTab(on ? null : m.name)}
+              aria-label={`${m.name}, ${m.stock} boîtes en stock`}
+              aria-pressed={on}
+              className={`flex w-full items-baseline gap-2 py-[5px] text-left ${on ? 'border-b border-ink bg-ink/[.05]' : 'border-b border-dotted border-ink-dot'}`}
             >
-              <PackagePlus className="w-4.5 h-4.5 w-[18px] h-[18px]" />
+              <span className="text-[12px] font-medium text-ink">{m.name}</span>
+              <span className="flex-1" />
+              <span className="font-mono text-[10px] font-medium" style={{ color: state.color }}>
+                {state.word}
+              </span>
+              <span className="w-[34px] text-right font-mono text-[13px] font-semibold text-ink">{m.stock}</span>
             </button>
-            <button
-              onClick={() => setRefModalOpen(true)}
-              className="p-2 rounded-xl text-gray-400 hover:text-primary-400 hover:bg-primary-600/10 transition-colors"
-              title="Gérer les références"
-            >
-              <Settings2 className="w-[18px] h-[18px]" />
-            </button>
-          </div>
+          );
+        })}
+      </section>
+
+      {/* Mouvements */}
+      <section className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5">
+        <div className="mb-1.5 flex items-baseline justify-between">
+          <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">MOUVEMENTS</span>
+          <button
+            onClick={() => setSortAsc((v) => !v)}
+            className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
+          >
+            {sortAsc ? 'ANCIEN' : 'RÉCENT'}
+          </button>
         </div>
 
-        {/* Product tabs */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
-          {references.map((ref) => {
-            const isActive = activeTab === ref.name;
-            const hex = getColorHex(ref.color);
-            return (
-              <button
-                key={ref.id}
-                onClick={() => setActiveTab(ref.name)}
-                className={`flex-shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-surface-800 border border-white/15'
-                    : 'text-gray-500 hover:text-gray-300'
-                }`}
-                style={isActive ? { color: hex } : undefined}
-              >
-                {ref.name}
-              </button>
-            );
-          })}
+        <div className="space-y-2 pb-2">
+          <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
+          <DatePresetPills active={datePreset} onChange={setDatePreset} />
+          <FilterPills
+            active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
+            onChange={(s) => setFilters({ status: s })}
+            counts={counts}
+          />
         </div>
 
-        {/* Stats */}
-        <StatsCards sales={sales} stockTotal={stockTotal} soldTotal={soldTotal} />
-      </div>
-
-      {/* Filters */}
-      <div className="px-4 py-3 space-y-2.5">
-        <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
-        <DatePresetPills active={datePreset} onChange={setDatePreset} />
-        <FilterPills
-          active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
-          onChange={(s) => setFilters({ status: s })}
-          counts={counts}
-        />
-      </div>
-
-      {/* List header */}
-      <div className="flex items-center justify-between px-4 pb-1">
-        <span className="text-xs text-gray-500">{filtered.length} vente{filtered.length !== 1 ? 's' : ''}</span>
-        <button
-          onClick={() => setSortAsc(v => !v)}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-        >
-          <ArrowUpDown className="w-3.5 h-3.5" />
-          {sortAsc ? 'Plus ancien' : 'Plus récent'}
-        </button>
-      </div>
-
-      {/* Sales list */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
         ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-gray-500 text-sm">Aucune vente</div>
+          <p className="py-10 text-center text-[12px] text-ink-45">
+            {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
+          </p>
         ) : (
           filtered.map((sale, i) => (
-            <SaleCard
-              key={sale.id}
-              sale={sale}
-              index={i}
-              onEdit={(s) => setEditSale(s)}
-              onDelete={handleDelete}
-            />
+            <SaleCard key={sale.id} sale={sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
           ))
         )}
-      </div>
+      </section>
 
-      {/* Edit modal */}
+      <DictationBar onClick={() => setSheetOpen(true)} />
+
       {editSale && (
         <EditSaleModal
           sale={editSale}
@@ -200,28 +200,22 @@ export function VolantsPage() {
           onSave={async (body) => {
             try {
               await updateSale(body as Record<string, unknown>);
-              addToast(`Mis à jour : ${editSale.acheteur}`, 'success');
+              addToast(`Mis à jour · ${editSale.acheteur}`, 'success');
               setEditSale(null);
             } catch { addToast('Erreur lors de la mise à jour', 'error'); }
           }}
         />
       )}
 
-      {/* FAB */}
-      <FAB onClick={() => setAiOpen(true)} />
-
-      {/* AI Modal */}
-      <AIAssistant
-        isOpen={aiOpen}
-        onClose={() => setAiOpen(false)}
+      <DictationSheet
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
         onSuccess={(msg) => addToast(msg, 'success')}
         onError={(msg) => addToast(msg, 'error')}
       />
 
-      {/* Reference management modal */}
       <ReferenceModal isOpen={refModalOpen} onClose={() => setRefModalOpen(false)} />
 
-      {/* Stock replenishment modal */}
       <StockModal
         isOpen={stockModalOpen}
         onClose={() => setStockModalOpen(false)}
@@ -230,7 +224,6 @@ export function VolantsPage() {
         onError={(msg) => addToast(msg, 'error')}
       />
 
-      {/* Toasts */}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

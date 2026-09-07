@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Minus, Plus, PackagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useReferencesStore } from '@/stores/referencesStore';
 import { useStockUpdate } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
-import { getColorHex } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface StockModalProps {
@@ -13,7 +11,7 @@ interface StockModalProps {
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
-  initialProduct?: string;
+  initialProduct?: string | null;
 }
 
 export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct }: StockModalProps) {
@@ -27,7 +25,6 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
   );
   const [qty, setQty] = useState(12);
 
-  // Sync selected product when modal opens on a different tab
   useEffect(() => {
     if (isOpen && initialProduct) {
       const ref = references.find((r) => r.name === initialProduct);
@@ -60,53 +57,39 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
         <>
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+            className="fixed inset-0 z-40" style={{ background: 'rgba(40,30,22,.35)' }}
             onClick={onClose}
           />
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             style={{ y }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 rounded-t-3xl border-t border-white/10 p-6 pb-safe"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
           >
-            {/* Handle */}
             <div {...bind()} className="touch-none">
-              <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2">
-                <PackagePlus className="w-4 h-4 text-teal-400" />
-                <h3 className="font-semibold text-white text-sm">Réapprovisionner le stock</h3>
+              <div className="flex items-baseline justify-between">
+                <span className="font-serif text-[22px] text-ink">Réassort</span>
+                <button onClick={onClose} className="font-mono text-[10px] font-medium tracking-kpi text-ink-45">
+                  FERMER
+                </button>
               </div>
-              <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-white/10">
-                <X className="w-4 h-4" />
-              </button>
             </div>
 
             {/* Product selector */}
-            <div className="mb-5">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">Produit</p>
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+            <div className="mb-5 mt-4">
+              <p className="mb-2 font-mono text-[9px] font-medium tracking-label text-ink-45">PRODUIT</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                 {references.map((r) => {
-                  const hex = getColorHex(r.color);
                   const isSelected = selectedId === r.id;
                   return (
                     <button
                       key={r.id}
                       onClick={() => setSelectedId(r.id)}
                       className={cn(
-                        'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all border',
-                        isSelected
-                          ? 'bg-surface-800 border-white/20 text-white'
-                          : 'border-transparent text-gray-400 hover:text-gray-200'
+                        'text-[12px] transition-colors',
+                        isSelected ? 'border-b-[1.5px] border-ink font-semibold text-ink' : 'text-ink-45'
                       )}
                     >
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: hex }}
-                      />
                       {r.name}
                     </button>
                   );
@@ -116,32 +99,22 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
 
             {/* Quantity */}
             <div className="mb-5">
-              <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Quantité reçue (boîtes)</p>
-              <div className="flex items-center gap-5 justify-center">
-                <button
-                  onClick={() => changeQty(-1)}
-                  className="w-12 h-12 rounded-2xl bg-surface-800 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span className="text-4xl font-bold text-white w-16 text-center tabular-nums">{qty}</span>
-                <button
-                  onClick={() => changeQty(1)}
-                  className="w-12 h-12 rounded-2xl bg-surface-800 border border-white/10 flex items-center justify-center text-white hover:bg-white/10 active:scale-95 transition-all"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <p className="mb-3 font-mono text-[9px] font-medium tracking-label text-ink-45">QUANTITÉ REÇUE (BOÎTES)</p>
+              <div className="flex items-center justify-center gap-7">
+                <button onClick={() => changeQty(-1)} aria-label="Retirer"
+                  className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">−</button>
+                <span className="w-16 text-center font-serif text-[44px] tabular-nums text-ink">{qty}</span>
+                <button onClick={() => changeQty(1)} aria-label="Ajouter"
+                  className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">+</button>
               </div>
             </div>
 
             {/* Summary */}
             {ref && (
-              <div className="bg-surface-800/50 rounded-2xl px-4 py-3 mb-5 border border-white/6">
-                <p className="text-xs text-gray-400 text-center">
-                  {qty} boîte{qty > 1 ? 's' : ''} de <span className="text-white font-medium">{ref.name}</span>
-                  {' '}&rarr; valeur de réappro : <span className="text-white font-medium">{(qty * ref.price).toFixed(0)} €</span>
-                </p>
-              </div>
+              <p className="mb-5 text-center text-[11px] leading-relaxed text-ink-55">
+                {qty} boîte{qty > 1 ? 's' : ''} de <span className="font-medium text-ink">{ref.name}</span>
+                {' '}— valeur de réappro : <span className="font-medium text-ink">{(qty * ref.price).toFixed(0)} €</span>
+              </p>
             )}
 
             <Button onClick={handleSubmit} loading={isPending} disabled={!ref} className="w-full">

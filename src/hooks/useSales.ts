@@ -26,6 +26,7 @@ export function useSalesData() {
   return useQuery({
     queryKey: ['sales', activeTab],
     queryFn: async () => {
+      if (!activeTab) return [];
       const price = references.find((r) => r.name === activeTab)?.price ?? 22;
       try {
         const rows = await salesApi.getAll(activeTab);
@@ -34,7 +35,7 @@ export function useSalesData() {
         return [];
       }
     },
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 
@@ -44,16 +45,16 @@ export function useAllSalesData() {
   return useQuery({
     queryKey: ['sales', 'all', refKey],
     queryFn: async () => {
-      const results: Sale[] = [];
-      for (const ref of references) {
-        try {
+      // Parallel fetching for all products
+      const settled = await Promise.allSettled(
+        references.map(async (ref) => {
           const rows = await salesApi.getAll(ref.name);
-          results.push(...rows.map((r, i) => mapRow(r, ref.name, i, ref.price)));
-        } catch { /* skip unavailable product */ }
-      }
-      return results;
+          return rows.map((r, i) => mapRow(r, ref.name, i, ref.price));
+        })
+      );
+      return settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
     },
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 }
 
@@ -61,26 +62,25 @@ export function useAchats() {
   return useQuery({
     queryKey: ['achats'],
     queryFn: () => salesApi.getAchats(),
-    staleTime: 60_000,
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
   });
 }
 
 export function useDeleteSale() {
   const qc = useQueryClient();
-  const { activeTab } = useSalesStore();
   return useMutation({
-    mutationFn: ({ rowIndex }: { rowIndex: number }) =>
-      salesApi.delete(activeTab, rowIndex),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', activeTab] }),
+    mutationFn: ({ rowIndex, tab }: { rowIndex: number; tab: string }) =>
+      salesApi.delete(tab, rowIndex),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales'] }),
   });
 }
 
 export function useUpdateSale() {
   const qc = useQueryClient();
-  const { activeTab } = useSalesStore();
   return useMutation({
     mutationFn: (body: Record<string, unknown>) => salesApi.update(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales', activeTab] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sales'] }),
   });
 }
 
@@ -101,7 +101,6 @@ export function useStockUpdate() {
     mutationFn: ({ product, qty }: { product: string; qty: number }) =>
       salesApi.chat(`J'ai reçu ${qty} boites de ${product}`).then((r) => r.data),
     onSuccess: (_, { product, qty }) => {
-      // Optimistic update: add qty to current cache immediately
       qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({
         ...old,
         [product]: (old[product] ?? 0) + qty,

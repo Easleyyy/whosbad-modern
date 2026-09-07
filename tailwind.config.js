@@ -1,21 +1,32 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        primary: { 50: '#EDEAFF', 100: '#D5CFFF', 500: '#6B62D9', 600: '#534AB7', 700: '#3C3489', 900: '#1A1560' },
-        teal: { 400: '#2DD4BF', 500: '#14B8A6', 600: '#0F6E56' },
-        success: { 100: '#C0DD97', 500: '#4CAF50', 600: '#3B6D11', 800: '#27500A' },
-        warning: { 100: '#FAC775', 500: '#FF9800', 600: '#854F0B', 800: '#633806' },
-        danger: { 100: '#F7C1C1', 500: '#EF4444', 600: '#A32D2D', 800: '#791F1F' },
-        surface: { 50: '#F8F7FF', 100: '#F0EEFF', 800: '#1A1730', 900: '#0F0F1A', 950: '#080812' },
+        paper: '#FBF7EF',
+        ink: {
+          DEFAULT: '#281E16',
+          55: 'rgba(40,30,22,.55)',
+          45: 'rgba(40,30,22,.45)',
+          40: 'rgba(40,30,22,.4)',
+          30: 'rgba(40,30,22,.3)',
+          rule: 'rgba(40,30,22,.2)',
+          dot: 'rgba(40,30,22,.24)',
+          hairline: 'rgba(40,30,22,.14)',
+        },
+        alert: 'oklch(0.55 0.16 28)',
+        gold: 'oklch(0.78 0.16 92)',
+        mid: 'oklch(0.5 0.12 72)',
+        ok: 'oklch(0.4 0.1 145)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
+        sans: ['Archivo', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
+      letterSpacing: { label: '.12em', kpi: '.1em' },
+      boxShadow: { bar: '0 6px 18px rgba(40,30,22,.2)' },
     },
   },
   plugins: [],

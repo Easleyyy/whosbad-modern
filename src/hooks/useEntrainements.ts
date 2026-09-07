@@ -10,29 +10,33 @@ interface EntrainementsData {
   groupOrder: string[];
 }
 
-// Payment status stored in localStorage
+// localStorage used as optimistic / offline cache
 const STORAGE_KEY = 'ent-payments';
 
 function getPayments(): Record<string, Record<string, PayStatus>> {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}'); } catch { return {}; }
 }
 
-function setPayment(groupe: string, nom: string, status: PayStatus) {
+function setPaymentLocal(groupe: string, nom: string, status: PayStatus) {
   const p = getPayments();
   if (!p[groupe]) p[groupe] = {};
   p[groupe][nom] = status;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
 }
 
-export function getPayStatus(groupe: string, nom: string): PayStatus {
-  return getPayments()[groupe]?.[nom] ?? 'pending';
+/**
+ * Returns pay status: server data (from query cache) takes priority,
+ * falls back to localStorage for optimistic / offline values.
+ */
+export function getPayStatus(groupe: string, nom: string, serverStatus?: PayStatus): PayStatus {
+  if (serverStatus && serverStatus !== 'pending') return serverStatus;
+  return getPayments()[groupe]?.[nom] ?? serverStatus ?? 'pending';
 }
 
-export function cyclePayStatus(groupe: string, nom: string): PayStatus {
+export function cyclePayStatus(groupe: string, nom: string, current: PayStatus): PayStatus {
   const cycle: PayStatus[] = ['pending', 'paid', 'unpaid'];
-  const cur = getPayStatus(groupe, nom);
-  const next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
-  setPayment(groupe, nom, next);
+  const next = cycle[(cycle.indexOf(current) + 1) % cycle.length];
+  setPaymentLocal(groupe, nom, next);
   return next;
 }
 
@@ -58,6 +62,15 @@ export function useDeletePlayer() {
   return useMutation({
     mutationFn: (body: { groupe: string; nom: string }) =>
       entrainementsApi.deletePlayer(body as unknown as Record<string, unknown>),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['entrainements'] }),
+  });
+}
+
+export function useSetPaiement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { groupe: string; nom: string; statut: string }) =>
+      entrainementsApi.setPaiement(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['entrainements'] }),
   });
 }

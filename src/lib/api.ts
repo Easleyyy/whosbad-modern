@@ -54,4 +54,6 @@ export const entrainementsApi = {
   addPlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/add', body),
   updatePlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/update', body),
   deletePlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/delete', body),
+  setPaiement: (body: { groupe: string; nom: string; statut: string }) =>
+    api.post('/api/entrainements/paiement', body),
 };

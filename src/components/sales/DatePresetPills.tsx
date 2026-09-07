@@ -15,16 +15,16 @@ interface DatePresetPillsProps {
 
 export function DatePresetPills({ active, onChange }: DatePresetPillsProps) {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-4 overflow-x-auto no-scrollbar font-mono text-[10px]">
       {PRESETS.map(({ key, label }) => (
         <button
           key={key}
           onClick={() => onChange(key)}
           className={cn(
-            'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all',
+            'flex-shrink-0 pb-1 transition-colors',
             active === key
-              ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30'
-              : 'bg-surface-800 text-gray-400 border border-white/8'
+              ? 'border-b-[1.5px] border-ink font-semibold text-ink'
+              : 'text-ink-45 hover:text-ink-55'
           )}
         >
           {label}

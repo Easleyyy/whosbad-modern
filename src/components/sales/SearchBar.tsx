@@ -1,5 +1,4 @@
-import { Search, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 interface SearchBarProps {
   value: string;
@@ -9,21 +8,16 @@ interface SearchBarProps {
 
 export function SearchBar({ value, onChange, placeholder = 'Rechercher…' }: SearchBarProps) {
   return (
-    <div className="relative">
-      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+    <div className="flex items-center gap-2 border-b border-ink-hairline py-1.5">
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={cn(
-          'w-full pl-10 pr-10 py-3 bg-surface-800 border border-white/8 rounded-xl',
-          'text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-600/40',
-          'text-base' // prevent iOS zoom
-        )}
+        className="min-w-0 flex-1 bg-transparent font-mono text-[10px] text-ink placeholder:text-ink-40 focus:outline-none"
       />
       {value && (
-        <button onClick={() => onChange('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500">
-          <X className="w-4 h-4" />
+        <button onClick={() => onChange('')} className="flex-shrink-0 text-ink-45 hover:text-ink">
+          <X className="w-3 h-3" />
         </button>
       )}
     </div>

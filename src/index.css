@@ -1,18 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  html { font-family: 'Inter', system-ui, sans-serif; }
-  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  body { overflow: hidden; }
-  :root { --sat: env(safe-area-inset-top); --sab: env(safe-area-inset-bottom); }
+  html {
+    font-family: Archivo, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  body {
+    overflow: hidden;
+    background-color: #FBF7EF;
+    color: #281E16;
+  }
+
+  a { color: #281E16; }
+  a:hover { color: oklch(0.55 0.16 28); }
+
+  :root {
+    --sat: env(safe-area-inset-top);
+    --sab: env(safe-area-inset-bottom);
+  }
 }
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0.5rem); }
+
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 1.625rem); }
   .pt-safe { padding-top: max(env(safe-area-inset-top), 0.5rem); }
   .h-dvh { height: 100dvh; }
+
+  /* Stat / KPI figures — tabular numerals */
+  .stat-value {
+    font-variant-numeric: tabular-nums;
+  }
 }

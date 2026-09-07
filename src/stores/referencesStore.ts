@@ -14,6 +14,7 @@ interface ReferencesState {
   addReference: (ref: Omit<ProductReference, 'id' | 'isDefault'>) => void;
   updateReference: (id: string, updates: Partial<Omit<ProductReference, 'id' | 'isDefault'>>) => void;
   deleteReference: (id: string) => void;
+  reorderReferences: (refs: ProductReference[]) => void;
 }
 
 export const useReferencesStore = create<ReferencesState>()(
@@ -30,6 +31,7 @@ export const useReferencesStore = create<ReferencesState>()(
         })),
       deleteReference: (id) =>
         set((s) => ({ references: s.references.filter((r) => r.id !== id) })),
+      reorderReferences: (refs) => set({ references: refs }),
     }),
     { name: 'wb-references' }
   )

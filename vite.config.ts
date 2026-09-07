@@ -13,14 +13,30 @@ export default defineConfig({
         name: "Who's Bad Logistic",
         short_name: 'WB Logistic',
         description: 'Gestion volants, t-shirts et entraînements',
-        theme_color: '#534AB7',
-        background_color: '#0F0F1A',
+        theme_color: '#FBF7EF',
+        background_color: '#FBF7EF',
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+        shortcuts: [
+          {
+            name: 'Nouvelle vente',
+            short_name: 'Vente',
+            description: "Ouvrir l'assistant IA pour saisir une vente",
+            url: '/?action=nouvelle-vente',
+            icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+          },
+          {
+            name: 'Impayés',
+            short_name: 'Impayés',
+            description: 'Voir les paiements en attente',
+            url: '/pending',
+            icons: [{ src: '/icon-192.png', sizes: '192x192' }],
+          },
         ],
       },
       workbox: {

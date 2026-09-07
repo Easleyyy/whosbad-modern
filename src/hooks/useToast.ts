@@ -6,6 +6,7 @@ export interface Toast {
   id: string;
   message: string;
   type: ToastType;
+  undoAction?: () => void;
 }
 
 export function useToast() {
@@ -17,9 +18,15 @@ export function useToast() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
 
+  const addUndoToast = useCallback((message: string, onUndo: () => void) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { id, message, type: 'info', undoAction: onUndo }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 5000);
+  }, []);
+
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  return { toasts, addToast, removeToast };
+  return { toasts, addToast, addUndoToast, removeToast };
 }

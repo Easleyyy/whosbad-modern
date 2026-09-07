@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Shirt } from 'lucide-react';
 import { useTshirts, useUpdateTshirt, useAddTshirt } from '@/hooks/useTshirts';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
-import { cn } from '@/lib/utils';
+import { LedgerHeader } from '@/components/ledger/LedgerHeader';
+import { DictationBar } from '@/components/ai/DictationBar';
+import { DictationSheet } from '@/components/ai/DictationSheet';
 
 const TAILLE_ORDER = ['XS', 'S', 'M', 'L', 'XL', '2XL', 'Junior'];
+const SEXE_ORDER = ['Homme', 'Femme', 'Junior', 'Mixte'];
 
 function sortTailles(tailles: string[]) {
   return [...tailles].sort((a, b) => {
@@ -20,193 +22,134 @@ function sortTailles(tailles: string[]) {
   });
 }
 
-function getQtyColor(qty: number) {
-  if (qty === 0) return 'text-gray-500';
-  if (qty <= 4) return 'text-danger-500';
-  if (qty <= 10) return 'text-warning-600';
-  return 'text-success-600';
+function sortSexes(sexes: string[]) {
+  return [...sexes].sort((a, b) => {
+    const ai = SEXE_ORDER.indexOf(a);
+    const bi = SEXE_ORDER.indexOf(b);
+    if (ai === -1 && bi === -1) return a.localeCompare(b);
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
 }
 
-interface EditModalProps {
-  marque: string; sexe: string; taille: string; qty: number;
-  onSave: (qty: number) => void; onClose: () => void; loading: boolean;
+/** Zeros keep printing — the ledger shows the holes, not hides them. */
+function qtyInk(q: number) {
+  if (q === 0) return { color: 'rgba(40,30,22,.3)', fontWeight: 400 };
+  if (q <= 3) return { color: 'oklch(0.55 0.16 28)', fontWeight: 600 };
+  if (q <= 6) return { color: 'oklch(0.5 0.12 72)', fontWeight: 600 };
+  return { color: '#281E16', fontWeight: 600 };
 }
 
-function EditModal({ marque, sexe, taille, qty, onSave, onClose, loading }: EditModalProps) {
-  const [value, setValue] = useState(qty);
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 rounded-t-3xl border-t border-white/10 p-6"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}>
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
-        <h3 className="font-semibold text-white mb-1">{marque}</h3>
-        <p className="text-sm text-gray-400 mb-6">{sexe} · {taille}</p>
-        <div className="flex items-center justify-center gap-6 mb-8">
-          <button onClick={() => setValue(Math.max(0, value - 1))}
-            className="w-12 h-12 rounded-full bg-surface-800 border border-white/10 text-white text-xl font-bold flex items-center justify-center">−</button>
-          <span className={cn('text-4xl font-bold tabular-nums', getQtyColor(value))}>{value}</span>
-          <button onClick={() => setValue(value + 1)}
-            className="w-12 h-12 rounded-full bg-surface-800 border border-white/10 text-white text-xl font-bold flex items-center justify-center">+</button>
-        </div>
-        <Button onClick={() => onSave(value)} loading={loading} className="w-full">Enregistrer</Button>
-      </motion.div>
-    </>
-  );
-}
-
-interface AddModalProps {
-  marque: string; onSave: (sexe: string, taille: string, qty: number) => void;
-  onClose: () => void; loading: boolean;
-}
-
-function AddModal({ marque, onSave, onClose, loading }: AddModalProps) {
-  const [sexe, setSexe] = useState('Homme');
-  const [taille, setTaille] = useState('M');
-  const [qty, setQty] = useState(0);
-  return (
-    <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 z-40 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 rounded-t-3xl border-t border-white/10 p-6 space-y-4"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1.5rem)' }}>
-        <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-1" />
-        <h3 className="font-semibold text-white">Ajouter une ligne — {marque}</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Sexe</label>
-            <select value={sexe} onChange={e => setSexe(e.target.value)}
-              className="w-full bg-surface-800 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600/40">
-              {['Homme', 'Femme', 'Junior'].map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Taille</label>
-            <select value={taille} onChange={e => setTaille(e.target.value)}
-              className="w-full bg-surface-800 border border-white/10 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-600/40">
-              {TAILLE_ORDER.map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Quantité</label>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setQty(Math.max(0, qty - 1))}
-              className="w-10 h-10 rounded-full bg-surface-800 border border-white/10 text-white text-xl flex items-center justify-center">−</button>
-            <span className="text-2xl font-bold text-white tabular-nums w-8 text-center">{qty}</span>
-            <button onClick={() => setQty(qty + 1)}
-              className="w-10 h-10 rounded-full bg-surface-800 border border-white/10 text-white text-xl flex items-center justify-center">+</button>
-          </div>
-        </div>
-        <Button onClick={() => onSave(sexe, taille, qty)} loading={loading} className="w-full">Ajouter</Button>
-      </motion.div>
-    </>
-  );
-}
+type Cell = { marque: string; sexe: string; taille: string; qty: number };
 
 export function TShirtsPage() {
   const { data, isLoading } = useTshirts();
   const { mutateAsync: updateItem, isPending: updating } = useUpdateTshirt();
   const { mutateAsync: addItem, isPending: adding } = useAddTshirt();
   const { toasts, addToast, removeToast } = useToast();
-  const [editCtx, setEditCtx] = useState<{ marque: string; sexe: string; taille: string; qty: number } | null>(null);
+  const [edit, setEdit] = useState<Cell | null>(null);
   const [addCtx, setAddCtx] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  if (isLoading) return <div className="flex items-center justify-center h-full text-gray-500 text-sm">Chargement…</div>;
+  if (isLoading) return <div className="flex h-full items-center justify-center text-[12px] text-ink-45">Chargement…</div>;
   if (!data) return null;
 
   const { marques, items } = data;
+  const total = items.reduce((n: number, i: { quantite: number }) => n + i.quantite, 0);
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-center gap-2 mb-4">
-          <Shirt className="w-5 h-5 text-purple-400" />
-          <h1 className="text-2xl font-bold text-white">T-Shirts</h1>
-        </div>
-      </div>
+    <div className="flex h-full flex-col bg-paper">
+      <LedgerHeader
+        title="Registre des maillots"
+        caption={`${total} pièces réparties sur ${marques.length} modèle${marques.length !== 1 ? 's' : ''}`}
+      />
 
-      <div className="px-4 pb-24 space-y-4">
-        {marques.map(marque => {
-          const mi = items.filter((i: { marque: string; sexe: string; taille: string; quantite: number }) => i.marque === marque);
+      <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5">
+        {marques.map((marque) => {
+          const mi = items.filter((i: { marque: string }) => i.marque === marque);
           const tailles = sortTailles([...new Set(mi.map((i: { taille: string }) => i.taille))]);
-          const sexes = [...new Set(mi.map((i: { sexe: string }) => i.sexe))].sort();
-          const total = mi.reduce((s: number, i: { quantite: number }) => s + i.quantite, 0);
+          const sexes = sortSexes([...new Set(mi.map((i: { sexe: string }) => i.sexe))]);
+          const mtotal = mi.reduce((n: number, i: { quantite: number }) => n + i.quantite, 0);
 
           return (
-            <motion.div key={marque} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              className="bg-surface-800/50 border border-white/8 rounded-2xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/6">
-                <div>
-                  <p className="font-semibold text-white text-sm">{marque}</p>
-                  <p className="text-xs text-gray-400">{total} en stock</p>
+            <section key={marque} className="mb-4">
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <h2 className="font-serif text-[20px] text-ink">{marque}</h2>
+                <div className="flex items-baseline gap-3">
+                  <span className="font-mono text-[10px] font-medium text-ink-45">{mtotal} PCS</span>
+                  <button
+                    onClick={() => setAddCtx(marque)}
+                    className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
+                  >
+                    + LIGNE
+                  </button>
                 </div>
-                <button onClick={() => setAddCtx(marque)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 text-purple-400 border border-purple-500/30 rounded-full text-xs font-medium">
-                  <Plus className="w-3 h-3" /> Ligne
-                </button>
               </div>
 
               {mi.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-gray-500 text-center">Aucun stock</p>
+                <p className="border-t-[1.5px] border-ink py-6 text-center text-[12px] text-ink-45">Aucun stock</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-white/6">
-                        <th className="px-4 py-2 text-left text-gray-500 font-medium"></th>
-                        {tailles.map((t: string) => <th key={t} className="px-3 py-2 text-center text-gray-500 font-medium">{t}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(sexes as string[]).map(sexe => (
-                        <tr key={sexe} className="border-b border-white/4 last:border-0">
-                          <td className="px-4 py-2.5 text-gray-400 font-medium">{sexe}</td>
-                          {tailles.map((taille: string) => {
-                            const it = mi.find((i: { sexe: string; taille: string; quantite: number }) => i.sexe === sexe && i.taille === taille);
-                            const qty = it?.quantite ?? 0;
-                            return (
-                              <td key={taille} className="px-3 py-2.5 text-center">
-                                <button onClick={() => setEditCtx({ marque, sexe, taille, qty })}
-                                  className={cn('font-bold text-sm hover:opacity-70 transition-opacity', getQtyColor(qty))}>
-                                  {qty}
-                                </button>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="grid border-t-[1.5px] border-ink" style={{ gridTemplateColumns: `58px repeat(${tailles.length}, 1fr)` }}>
+                  <div className="border-b border-ink-rule" />
+                  {tailles.map((t) => (
+                    <div key={t} className="border-b border-ink-rule py-[5px] text-center font-mono text-[9.5px] font-medium text-ink-45">
+                      {t}
+                    </div>
+                  ))}
+
+                  {sexes.map((sexe) => (
+                    <div key={sexe} className="contents">
+                      <div className="border-b border-dotted border-ink-dot py-2 text-[11px] font-medium text-ink-55">
+                        {sexe}
+                      </div>
+                      {tailles.map((taille) => {
+                        const it = mi.find((i: { sexe: string; taille: string }) => i.sexe === sexe && i.taille === taille);
+                        const qty = it?.quantite ?? 0;
+                        return (
+                          <button
+                            key={taille}
+                            onClick={() => setEdit({ marque, sexe, taille, qty })}
+                            aria-label={`${marque}, ${sexe}, taille ${taille} : ${qty}`}
+                            className="border-b border-dotted border-ink-dot py-2 text-center font-mono text-[13px]"
+                            style={qtyInk(qty)}
+                          >
+                            {qty}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               )}
-            </motion.div>
+            </section>
           );
         })}
+
+        <p className="border-t border-ink-rule pt-2.5 text-[11px] leading-[1.5] text-ink-55">
+          Les zéros restent visibles : le registre montre les trous de stock au lieu de les cacher.
+        </p>
       </div>
 
+      <DictationBar onClick={() => setSheetOpen(true)} hint="« reçu 20 maillots femme M »" />
+
       <AnimatePresence>
-        {editCtx && (
-          <EditModal
-            {...editCtx}
+        {edit && (
+          <QuantitySheet
+            cell={edit}
             loading={updating}
-            onClose={() => setEditCtx(null)}
+            onClose={() => setEdit(null)}
             onSave={async (qty) => {
               try {
-                await updateItem({ marque: editCtx.marque, sexe: editCtx.sexe, taille: editCtx.taille, nouvelle_quantite: qty });
-                addToast(`${editCtx.marque} ${editCtx.sexe} ${editCtx.taille} → ${qty}`, 'success');
-                setEditCtx(null);
+                await updateItem({ marque: edit.marque, sexe: edit.sexe, taille: edit.taille, nouvelle_quantite: qty });
+                addToast(`${edit.marque} ${edit.sexe} ${edit.taille} → ${qty}`, 'success');
+                setEdit(null);
               } catch { addToast('Erreur', 'error'); }
             }}
           />
         )}
         {addCtx && (
-          <AddModal
+          <AddLineSheet
             marque={addCtx}
             loading={adding}
             onClose={() => setAddCtx(null)}
@@ -221,7 +164,112 @@ export function TShirtsPage() {
         )}
       </AnimatePresence>
 
+      <DictationSheet
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onSuccess={(m) => addToast(m, 'success')}
+        onError={(m) => addToast(m, 'error')}
+      />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
+  );
+}
+
+function QuantitySheet({
+  cell,
+  loading,
+  onSave,
+  onClose,
+}: {
+  cell: Cell;
+  loading: boolean;
+  onSave: (qty: number) => void;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(cell.qty);
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose} className="fixed inset-0 z-40" style={{ background: 'rgba(40,30,22,.35)' }}
+      />
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+      >
+        <h3 className="font-serif text-[22px] text-ink">{cell.marque}</h3>
+        <p className="mb-6 font-mono text-[10px] font-medium tracking-kpi text-ink-45">
+          {cell.sexe.toUpperCase()} · {cell.taille}
+        </p>
+        <div className="mb-7 flex items-center justify-center gap-7">
+          <button onClick={() => setValue(Math.max(0, value - 1))} aria-label="Retirer"
+            className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">−</button>
+          <span className="font-serif text-[44px] tabular-nums text-ink">{value}</span>
+          <button onClick={() => setValue(value + 1)} aria-label="Ajouter"
+            className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">+</button>
+        </div>
+        <Button onClick={() => onSave(value)} loading={loading} className="w-full">Enregistrer</Button>
+      </motion.div>
+    </>
+  );
+}
+
+function AddLineSheet({
+  marque,
+  loading,
+  onSave,
+  onClose,
+}: {
+  marque: string;
+  loading: boolean;
+  onSave: (sexe: string, taille: string, qty: number) => void;
+  onClose: () => void;
+}) {
+  const [sexe, setSexe] = useState('Homme');
+  const [taille, setTaille] = useState('M');
+  const [qty, setQty] = useState(0);
+  const fieldClass = 'w-full border-[1.5px] border-ink bg-transparent px-3 py-2.5 text-[13px] text-ink focus:outline-none appearance-none';
+  const labelClass = 'mb-1.5 block font-mono text-[9px] font-medium tracking-label text-ink-45';
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose} className="fixed inset-0 z-40" style={{ background: 'rgba(40,30,22,.35)' }}
+      />
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] space-y-4 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+      >
+        <h3 className="font-serif text-[22px] text-ink">Ajouter une ligne — {marque}</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Sexe</label>
+            <select value={sexe} onChange={(e) => setSexe(e.target.value)} className={fieldClass}>
+              {['Homme', 'Femme', 'Junior'].map((s) => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Taille</label>
+            <select value={taille} onChange={(e) => setTaille(e.target.value)} className={fieldClass}>
+              {TAILLE_ORDER.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label className={labelClass}>Quantité</label>
+          <div className="flex items-center gap-5">
+            <button onClick={() => setQty(Math.max(0, qty - 1))} className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">−</button>
+            <span className="w-8 text-center font-serif text-[22px] tabular-nums text-ink">{qty}</span>
+            <button onClick={() => setQty(qty + 1)} className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">+</button>
+          </div>
+        </div>
+        <div className="pb-3">
+          <Button onClick={() => onSave(sexe, taille, qty)} loading={loading} className="w-full">Ajouter</Button>
+        </div>
+      </motion.div>
+    </>
   );
 }
