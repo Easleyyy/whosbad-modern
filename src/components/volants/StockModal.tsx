@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { useReferencesStore } from '@/stores/referencesStore';
 import { useStockUpdate, useReassortLog, useUpdateReassort, useDeleteReassort } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
+import { NumberStepper } from '@/components/ui/NumberStepper';
 import { cn } from '@/lib/utils';
 import type { ReassortEntry } from '@/types';
 
@@ -43,8 +44,6 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initia
   const { mutateAsync: deleteReassort, isPending: deletingReassort } = useDeleteReassort();
 
   useEffect(() => { setEditingRow(null); }, [selectedId]);
-
-  const changeQty = (delta: number) => setQty((q) => Math.max(1, q + delta));
 
   const handleSubmit = async () => {
     if (!ref) return;
@@ -137,12 +136,8 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initia
             {/* Quantity */}
             <div className="mb-5">
               <p className="mb-3 font-mono text-[9px] font-medium tracking-label text-ink-45">QUANTITÉ REÇUE (BOÎTES)</p>
-              <div className="flex items-center justify-center gap-7">
-                <button onClick={() => changeQty(-1)} aria-label="Retirer"
-                  className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">−</button>
-                <span className="w-16 text-center font-serif text-[44px] tabular-nums text-ink">{qty}</span>
-                <button onClick={() => changeQty(1)} aria-label="Ajouter"
-                  className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">+</button>
+              <div className="flex items-center justify-center">
+                <NumberStepper value={qty} onChange={setQty} min={0} size="lg" />
               </div>
             </div>
 
@@ -177,12 +172,8 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initia
                         <span className="w-16 flex-shrink-0 font-mono text-[10px] text-ink-45">{entry.date || '—'}</span>
                         {isEditing ? (
                           <>
-                            <div className="flex flex-1 items-center gap-2">
-                              <button onClick={() => setEditQty((q) => Math.max(1, q - 1))}
-                                className="h-6 w-6 flex-shrink-0 border-[1.5px] border-ink text-sm text-ink">−</button>
-                              <span className="w-8 text-center font-mono text-[12px] tabular-nums text-ink">{editQty}</span>
-                              <button onClick={() => setEditQty((q) => q + 1)}
-                                className="h-6 w-6 flex-shrink-0 border-[1.5px] border-ink text-sm text-ink">+</button>
+                            <div className="flex flex-1 items-center">
+                              <NumberStepper value={editQty} onChange={setEditQty} min={0} size="sm" />
                             </div>
                             <button onClick={() => saveEditEntry(entry)} disabled={busy}
                               className="flex-shrink-0 font-mono text-[9px] font-semibold tracking-label text-ink disabled:opacity-40">

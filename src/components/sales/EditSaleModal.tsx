@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
+import { NumberStepper } from '@/components/ui/NumberStepper';
 import { cn } from '@/lib/utils';
 import { useModalGestures } from '@/hooks/useModalGestures';
 import type { Sale, PaymentStatus, PaymentMode } from '@/types';
@@ -122,13 +123,7 @@ export function EditSaleModal({ sale, onSave, onDelete, onClose, loading }: Edit
           {/* Quantité */}
           <div>
             <label className={labelClass}>Quantité</label>
-            <div className="flex items-center gap-5">
-              <button onClick={() => setQuantite(Math.max(1, quantite - 1))}
-                className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">−</button>
-              <span className="w-8 text-center font-serif text-[22px] tabular-nums text-ink">{quantite}</span>
-              <button onClick={() => setQuantite(quantite + 1)}
-                className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">+</button>
-            </div>
+            <NumberStepper value={quantite} onChange={setQuantite} min={1} size="md" />
           </div>
 
           {/* Commentaire */}

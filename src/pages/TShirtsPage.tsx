@@ -4,6 +4,7 @@ import { useTshirts, useUpdateTshirt, useAddTshirt } from '@/hooks/useTshirts';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
+import { NumberStepper } from '@/components/ui/NumberStepper';
 import { LedgerHeader } from '@/components/ledger/LedgerHeader';
 import { DictationBar } from '@/components/ai/DictationBar';
 import { DictationSheet } from '@/components/ai/DictationSheet';
@@ -203,12 +204,8 @@ function QuantitySheet({
         <p className="mb-6 font-mono text-[10px] font-medium tracking-kpi text-ink-45">
           {cell.sexe.toUpperCase()} · {cell.taille}
         </p>
-        <div className="mb-7 flex items-center justify-center gap-7">
-          <button onClick={() => setValue(Math.max(0, value - 1))} aria-label="Retirer"
-            className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">−</button>
-          <span className="font-serif text-[44px] tabular-nums text-ink">{value}</span>
-          <button onClick={() => setValue(value + 1)} aria-label="Ajouter"
-            className="h-12 w-12 border-[1.5px] border-ink text-xl text-ink">+</button>
+        <div className="mb-7 flex items-center justify-center">
+          <NumberStepper value={value} onChange={setValue} min={0} size="lg" />
         </div>
         <Button onClick={() => onSave(value)} loading={loading} className="w-full">Enregistrer</Button>
       </motion.div>
@@ -261,11 +258,7 @@ function AddLineSheet({
         </div>
         <div>
           <label className={labelClass}>Quantité</label>
-          <div className="flex items-center gap-5">
-            <button onClick={() => setQty(Math.max(0, qty - 1))} className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">−</button>
-            <span className="w-8 text-center font-serif text-[22px] tabular-nums text-ink">{qty}</span>
-            <button onClick={() => setQty(qty + 1)} className="h-10 w-10 border-[1.5px] border-ink text-lg text-ink">+</button>
-          </div>
+          <NumberStepper value={qty} onChange={setQty} min={0} size="md" />
         </div>
         <div className="pb-3">
           <Button onClick={() => onSave(sexe, taille, qty)} loading={loading} className="w-full">Ajouter</Button>
