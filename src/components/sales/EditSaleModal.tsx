@@ -15,11 +15,12 @@ const PAYE_LABEL: Record<PaymentStatus, string> = { Oui: 'Payé', Non: 'En atten
 interface EditSaleModalProps {
   sale: Sale;
   onSave: (updated: Partial<Sale> & { rowIndex: number; tab: string }) => void;
+  onDelete: (sale: Sale) => void;
   onClose: () => void;
   loading: boolean;
 }
 
-export function EditSaleModal({ sale, onSave, onClose, loading }: EditSaleModalProps) {
+export function EditSaleModal({ sale, onSave, onDelete, onClose, loading }: EditSaleModalProps) {
   const [date, setDate] = useState(sale.date);
   const [acheteur, setAcheteur] = useState(sale.acheteur);
   const [vendeur, setVendeur] = useState(sale.vendeur);
@@ -27,6 +28,7 @@ export function EditSaleModal({ sale, onSave, onClose, loading }: EditSaleModalP
   const [paye, setPaye] = useState<PaymentStatus>(sale.paye);
   const [mode, setMode] = useState<PaymentMode | ''>(sale.mode_paiement);
   const [commentaire, setCommentaire] = useState(sale.commentaire ?? '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const { y, bind } = useModalGestures(true, onClose);
 
@@ -136,8 +138,22 @@ export function EditSaleModal({ sale, onSave, onClose, loading }: EditSaleModalP
               className={fieldClass} />
           </div>
 
-          <div className="pb-3">
+          <div className="space-y-2.5 pb-3">
             <Button onClick={handleSave} loading={loading} className="w-full">Enregistrer</Button>
+            {confirmingDelete ? (
+              <div className="flex items-center justify-center gap-4 font-mono text-[10px] tracking-label">
+                <span className="text-ink-55">Supprimer définitivement ?</span>
+                <button onClick={() => onDelete(sale)} className="font-semibold text-alert">OUI, SUPPRIMER</button>
+                <button onClick={() => setConfirmingDelete(false)} className="text-ink-45">ANNULER</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="w-full py-1 text-center font-mono text-[10px] font-medium tracking-label text-ink-45 hover:text-alert"
+              >
+                SUPPRIMER CETTE VENTE
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

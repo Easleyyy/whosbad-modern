@@ -93,3 +93,11 @@ export interface TrainingPlayer {
 export interface TrainingGroup {
   [groupe: string]: TrainingPlayer[];
 }
+
+export interface ReassortEntry {
+  _row: number;
+  date: string;
+  produit: string;
+  qty: number;
+  commentaire?: string;
+}

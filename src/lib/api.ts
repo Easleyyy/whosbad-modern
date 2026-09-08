@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { ReassortEntry } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://whosbad-backend.onrender.com';
 
@@ -33,6 +34,15 @@ export const salesApi = {
 
   addStock: (produit: string, qty: number) =>
     api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/add', { produit, qty }).then((r) => r.data),
+
+  getReassortLog: (produit: string) =>
+    api.get<{ success: boolean; log: ReassortEntry[] }>('/api/achats/log', { params: { produit } }).then((r) => r.data.log),
+
+  updateReassort: (rowIndex: number, produit: string, qty: number) =>
+    api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/update', { rowIndex, produit, qty }).then((r) => r.data),
+
+  deleteReassort: (rowIndex: number, produit: string) =>
+    api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/delete', { rowIndex, produit }).then((r) => r.data),
 
   addReference: (name: string, price: number) =>
     api.post<{ success: boolean; produit: string; prix: number; error?: string }>('/api/references/add', { name, price }).then((r) => r.data),

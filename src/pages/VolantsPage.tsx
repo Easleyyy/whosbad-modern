@@ -200,6 +200,10 @@ export function VolantsPage() {
               setEditSale(null);
             } catch { addToast('Erreur lors de la mise à jour', 'error'); }
           }}
+          onDelete={(sale) => {
+            handleDelete(sale);
+            setEditSale(null);
+          }}
         />
       )}
 

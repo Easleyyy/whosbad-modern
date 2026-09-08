@@ -115,6 +115,46 @@ export function useStockUpdate() {
         ...old,
         [result.produit]: result.achats,
       }));
+      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
+    },
+  });
+}
+
+export function useReassortLog(produit: string | null) {
+  return useQuery({
+    queryKey: ['reassort', produit],
+    queryFn: () => salesApi.getReassortLog(produit as string),
+    enabled: !!produit,
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateReassort() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rowIndex, produit, qty }: { rowIndex: number; produit: string; qty: number }) => {
+      const result = await salesApi.updateReassort(rowIndex, produit, qty);
+      if (!result.success) throw new Error(result.error ?? 'Échec de la mise à jour');
+      return result;
+    },
+    onSuccess: (result) => {
+      qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({ ...old, [result.produit]: result.achats }));
+      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
+    },
+  });
+}
+
+export function useDeleteReassort() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rowIndex, produit }: { rowIndex: number; produit: string }) => {
+      const result = await salesApi.deleteReassort(rowIndex, produit);
+      if (!result.success) throw new Error(result.error ?? 'Échec de la suppression');
+      return result;
+    },
+    onSuccess: (result) => {
+      qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({ ...old, [result.produit]: result.achats }));
+      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
     },
   });
 }
