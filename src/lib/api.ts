@@ -50,7 +50,7 @@ export const salesApi = {
     api.delete<{ success: boolean }>('/api/delete', { data: { tab, rowIndex } }),
 
   chat: (message: string) =>
-    api.post<{ success: boolean; action: string; message: string; data?: unknown[] }>('/api/chat', { message }),
+    api.post<{ success: boolean; action: string; message: string; produit?: string; data?: unknown[] }>('/api/chat', { message }),
 };
 
 // ── T-Shirts ──────────────────────────────────────────────────────

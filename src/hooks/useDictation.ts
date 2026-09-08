@@ -56,8 +56,10 @@ function parseAddRef(msg: string): { name: string; price: number } | null {
 }
 
 /** Detect stock reception, in many phrasings: "reçu 20 boites de NCS Pro", "on a reçu 15 Victor C1",
- *  "+12 Victor GM", "réassort de 30 CBX Red", "10 Victor PC viennent d'arriver", "rentré 8 CBX Blue" */
-function parseStockIn(msg: string, refs: ProductReference[]): { ref: ProductReference; qty: number } | null {
+ *  "+12 Victor GM", "réassort de 30 CBX Red", "10 Victor PC viennent d'arriver", "rentré 8 CBX Blue".
+ *  `ref` is null when the quantity/product pattern matched but the product name isn't a known
+ *  reference yet — the caller can then offer to create it on the fly instead of silently dropping it. */
+function parseStockIn(msg: string, refs: ProductReference[]): { ref: ProductReference | null; qty: number; name: string } | null {
   const PATTERNS = [
     /(?:on\s+a\s+|j'?\s*ai\s+)?(?:reçu?|réceptionn[ée]|rentr[ée]e?|livr[ée]e?|livraison)\s+(?:de\s+)?(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)(?:\s*$)/i,
     /(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)\s+(?:sont\s+arriv[ée]es?|viennent\s+d'arriver|reçues?|livrées?|arrivées?)/i,
@@ -67,6 +69,7 @@ function parseStockIn(msg: string, refs: ProductReference[]): { ref: ProductRefe
     /(\d+)\s+(?:boîtes?|boites?)\s+(?:de\s+)?(.+?)\s+(?:en\s+)?stock/i,
     /stock\s+(.+?)\s*[+:]\s*(\d+)/i, // "stock Victor GM +20" (name then qty)
   ];
+  let firstMatch: { ref: null; qty: number; name: string } | null = null;
   for (let i = 0; i < PATTERNS.length; i++) {
     const m = msg.match(PATTERNS[i]);
     if (!m) continue;
@@ -75,9 +78,10 @@ function parseStockIn(msg: string, refs: ProductReference[]): { ref: ProductRefe
     const qty = parseInt(qtyStr);
     if (isNaN(qty) || qty <= 0) continue;
     const ref = findRef(nameStr, refs);
-    if (ref) return { ref, qty };
+    if (ref) return { ref, qty, name: ref.name };
+    if (!firstMatch) firstMatch = { ref: null, qty, name: nameStr.trim() };
   }
-  return null;
+  return firstMatch;
 }
 
 /** Detect stock query: "combien de NCS Pro", "stock Victor C1 ?", "il reste quoi en CBX Red",
@@ -134,10 +138,16 @@ interface UseDictationOptions {
  * voice input, and the backend fallback. Used by both the DictationSheet (quick
  * access from any registre page) and the full-page chat landing screen.
  */
+/** A named product was used (sale or stock-in) but isn't a known reference yet —
+ *  we ask for its price, then either apply `qty` directly (stock-in) or replay
+ *  `raw` through the backend once the reference exists (sale). */
+type PendingUnknownRef = { raw: string; name: string; qty?: number };
+
 export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }: UseDictationOptions) {
   const [text, setText] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [elapsed, setElapsed] = useState(0);
+  const [pendingUnknown, setPendingUnknown] = useState<PendingUnknownRef | null>(null);
   const timerRef = useRef<number | null>(null);
 
   const { mutateAsync: sendChat, isPending: chatPending } = useAIChat();
@@ -204,6 +214,21 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     onError(msg);
   };
 
+  /** Asks a question and keeps the input open for the reply, instead of
+   *  closing the sheet like succeed()/fail() do. */
+  const ask = (msg: string) => {
+    setTurns((t) => [...t, { from: 'ai', text: msg }]);
+  };
+
+  const describeChatResult = (result: { message?: string; action?: string }) =>
+    result.message ?? (
+      result.action === 'modifier'        ? 'Vente(s) mise(s) à jour ✓'      :
+      result.action === 'vente'           ? 'Vente(s) ajoutée(s) ✓'          :
+      result.action === 'square_payment'  ? 'Vente enregistrée · Square ✓'  :
+      result.action === 'stock_update'    ? 'Stock mis à jour ✓'             :
+      'Enregistré !'
+    );
+
   const handleSend = async () => {
     const raw = (isListening ? transcript : text).trim();
     if (!raw) return;
@@ -211,6 +236,44 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     setTurns((t) => [...t, { from: 'user', text: raw }]);
     setText('');
     if (isListening) { stop(); reset(); }
+
+    // ── 0. Resolve a pending "je ne connais pas ce produit, quel prix ?" ───
+    // Covers both stock-in ("+15 NCS Pro") and sales ("2 NCS Pro pour David")
+    // of a product that isn't a known reference yet — instead of just
+    // rejecting it, we ask for a price, create the reference, then either
+    // apply the stock movement directly or replay the original sale.
+    if (pendingUnknown) {
+      const pending = pendingUnknown;
+      setPendingUnknown(null);
+      const priceMatch = raw.match(/^(\d+(?:[,.]\d+)?)\s*(?:€|euros?)?$/i);
+      const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : NaN;
+      if (!isNaN(price) && price > 0) {
+        try {
+          const result = await withWakeHint(() => salesApi.addReference(pending.name, price));
+          if (!result.success) throw new Error(result.error ?? 'Erreur serveur');
+          addReference({ name: pending.name, price, color: 'purple' });
+
+          if (pending.qty) {
+            await withWakeHint(() => updateStock({ product: pending.name, qty: pending.qty! }));
+            succeed(`Référence « ${pending.name} » créée à ${price} € — +${pending.qty} boîte${pending.qty > 1 ? 's' : ''} ✓`);
+          } else {
+            const chatResult = await withWakeHint(() => sendChat(pending.raw));
+            if (chatResult.action === 'produit_inconnu') {
+              fail(`Référence créée, mais je n'ai pas retrouvé « ${pending.name} » dans ta phrase — réessaie en la réécrivant`);
+            } else if (chatResult.success) {
+              succeed(`Référence « ${pending.name} » créée à ${price} € — ${describeChatResult(chatResult)}`);
+            } else {
+              fail("Référence créée, mais le chatbot n'a pas compris la suite. Reformule ?");
+            }
+          }
+        } catch (e) {
+          fail(e instanceof Error ? e.message : 'Erreur réseau');
+        }
+        return;
+      }
+      // Not a price → the user moved on; drop the pending question and
+      // process this message normally instead of getting stuck.
+    }
 
     // ── 1. Add reference — registers on the backend first (Stock row + sales
     //      tab) so the reference is actually usable, not just a local label ──
@@ -230,8 +293,13 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     // ── 2. Stock reception (local for speed & custom product support) ──────
     const stockIn = parseStockIn(raw, references);
     if (stockIn) {
+      if (!stockIn.ref) {
+        ask(`Je ne connais pas encore « ${stockIn.name} ». Quel est son prix pour l'ajouter au catalogue ? (ex: 20€)`);
+        setPendingUnknown({ raw, name: stockIn.name, qty: stockIn.qty });
+        return;
+      }
       try {
-        await withWakeHint(() => updateStock({ product: stockIn.ref.name, qty: stockIn.qty }));
+        await withWakeHint(() => updateStock({ product: stockIn.ref!.name, qty: stockIn.qty }));
         succeed(`+${stockIn.qty} boîte${stockIn.qty > 1 ? 's' : ''} de ${stockIn.ref.name} ✓`);
       } catch (e) {
         fail(e instanceof Error ? e.message : 'Erreur réseau');
@@ -257,15 +325,11 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     // ── 5. Backend — useAIChat injects the full catalogue automatically ────
     try {
       const result = await withWakeHint(() => sendChat(raw));
-      if (result.success) {
-        const msg = result.message ?? (
-          result.action === 'modifier'        ? 'Vente(s) mise(s) à jour ✓'      :
-          result.action === 'vente'           ? 'Vente(s) ajoutée(s) ✓'          :
-          result.action === 'square_payment'  ? 'Vente enregistrée · Square ✓'  :
-          result.action === 'stock_update'    ? 'Stock mis à jour ✓'             :
-          'Enregistré !'
-        );
-        succeed(msg);
+      if (result.action === 'produit_inconnu' && result.produit) {
+        ask(result.message ?? `Je ne connais pas « ${result.produit} ». Quel est son prix ?`);
+        setPendingUnknown({ raw, name: result.produit });
+      } else if (result.success) {
+        succeed(describeChatResult(result));
       } else {
         fail("Le chatbot n'a pas compris. Reformule ?");
       }
