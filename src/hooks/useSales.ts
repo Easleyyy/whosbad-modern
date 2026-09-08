@@ -100,18 +100,21 @@ export function useAIChat() {
 
 export function useStockUpdate() {
   const qc = useQueryClient();
-  const { references } = useReferencesStore();
   return useMutation({
-    mutationFn: ({ product, qty }: { product: string; qty: number }) =>
-      salesApi
-        .chat(withCatalogueContext(`J'ai reçu ${qty} boites de ${product}`, references))
-        .then((r) => r.data),
-    onSuccess: (_, { product, qty }) => {
+    // Calls the dedicated /api/achats/add route directly — the chat endpoint
+    // has no real concept of "stock movement" (it can only record sales), so
+    // routing reappro through it was unreliable and could misfire into a
+    // fake sale. This writes straight to the persisted Stock sheet.
+    mutationFn: async ({ product, qty }: { product: string; qty: number }) => {
+      const result = await salesApi.addStock(product, qty);
+      if (!result.success) throw new Error(result.error ?? 'Échec de la mise à jour du stock');
+      return result;
+    },
+    onSuccess: (result) => {
       qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({
         ...old,
-        [product]: (old[product] ?? 0) + qty,
+        [result.produit]: result.achats,
       }));
-      qc.invalidateQueries({ queryKey: ['sales'] });
     },
   });
 }

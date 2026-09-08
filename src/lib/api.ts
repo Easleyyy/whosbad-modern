@@ -28,6 +28,12 @@ export const salesApi = {
   getAchats: () =>
     api.get<Record<string, number>>('/api/achats').then((r) => r.data),
 
+  addStock: (produit: string, qty: number) =>
+    api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/add', { produit, qty }).then((r) => r.data),
+
+  addReference: (name: string, price: number) =>
+    api.post<{ success: boolean; produit: string; prix: number; error?: string }>('/api/references/add', { name, price }).then((r) => r.data),
+
   add: (body: Record<string, unknown>) =>
     api.post<{ success: boolean }>('/api/add', body),
 

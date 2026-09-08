@@ -39,15 +39,11 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
   const handleSubmit = async () => {
     if (!ref) return;
     try {
-      const result = await updateStock({ product: ref.name, qty });
-      if (result.success) {
-        onSuccess(result.message || `+${qty} boîte${qty > 1 ? 's' : ''} de ${ref.name} ajouté${qty > 1 ? 'es' : ''} ✓`);
-        onClose();
-      } else {
-        onError('Erreur lors de la mise à jour du stock');
-      }
-    } catch {
-      onError('Erreur réseau');
+      await updateStock({ product: ref.name, qty });
+      onSuccess(`+${qty} boîte${qty > 1 ? 's' : ''} de ${ref.name} ajouté${qty > 1 ? 'es' : ''} ✓`);
+      onClose();
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Erreur réseau');
     }
   };
 

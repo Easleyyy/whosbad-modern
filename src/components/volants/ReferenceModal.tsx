@@ -3,6 +3,7 @@ import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion
 import { GripVertical } from 'lucide-react';
 import { useReferencesStore } from '@/stores/referencesStore';
 import { useModalGestures } from '@/hooks/useModalGestures';
+import { salesApi } from '@/lib/api';
 import { COLOR_OPTIONS, getColorHex, type ProductReference } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -26,12 +27,14 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const resetState = () => {
     setEditingId(null);
     setAdding(false);
     setForm(EMPTY_FORM);
     setError('');
+    setSaving(false);
   };
 
   const validateForm = (): boolean => {
@@ -41,10 +44,22 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
     return true;
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!validateForm()) return;
-    addReference({ name: form.name.trim(), price: parseFloat(form.price.replace(',', '.')), color: form.color });
-    resetState();
+    const name = form.name.trim();
+    const price = parseFloat(form.price.replace(',', '.'));
+    setSaving(true);
+    try {
+      // Register on the backend first (creates the Stock row + sales tab) so
+      // the reference is actually usable for sales/stock, not just a local label.
+      const result = await salesApi.addReference(name, price);
+      if (!result.success) { setError(result.error ?? 'Erreur serveur'); setSaving(false); return; }
+      addReference({ name, price, color: form.color });
+      resetState();
+    } catch {
+      setError('Erreur réseau — la référence n\'a pas été créée');
+      setSaving(false);
+    }
   };
 
   const handleSaveEdit = () => {
@@ -132,6 +147,7 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
                     onCancel={resetState}
                     isNew
                     error={error}
+                    saving={saving}
                   />
                 </div>
               )}
@@ -217,9 +233,10 @@ interface RefFormProps {
   onCancel: () => void;
   isNew?: boolean;
   error?: string;
+  saving?: boolean;
 }
 
-function RefForm({ form, setForm, onSave, onCancel, isNew, error }: RefFormProps) {
+function RefForm({ form, setForm, onSave, onCancel, isNew, error, saving }: RefFormProps) {
   return (
     <div className="space-y-3 border-[1.5px] border-ink p-4">
       <div className="flex gap-2">
@@ -266,9 +283,9 @@ function RefForm({ form, setForm, onSave, onCancel, isNew, error }: RefFormProps
       {error && <p className="text-[11px] text-alert">{error}</p>}
 
       <div className="flex gap-4 font-mono text-[10px] tracking-label">
-        <button type="button" onClick={onCancel} className="text-ink-45 hover:text-ink">ANNULER</button>
-        <button type="button" onClick={onSave} className="font-semibold text-ink">
-          {isNew ? 'AJOUTER' : 'ENREGISTRER'}
+        <button type="button" onClick={onCancel} disabled={saving} className="text-ink-45 hover:text-ink disabled:opacity-40">ANNULER</button>
+        <button type="button" onClick={onSave} disabled={saving} className="font-semibold text-ink disabled:opacity-40">
+          {saving ? 'CRÉATION…' : isNew ? 'AJOUTER' : 'ENREGISTRER'}
         </button>
       </div>
     </div>

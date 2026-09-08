@@ -4,6 +4,7 @@ import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { useAIChat, useStockUpdate, useAchats, useAllSalesData } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
 import { useReferencesStore } from '@/stores/referencesStore';
+import { salesApi } from '@/lib/api';
 import type { ProductReference } from '@/types';
 
 // ─── Local parsers ──────────────────────────────────────────────────────────
@@ -178,12 +179,21 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
     setText('');
     if (isListening) { stop(); reset(); }
 
-    // ── 1. Add reference (local, no backend needed) ────────────────────────
+    // ── 1. Add reference — registers on the backend first (Stock row + sales
+    //      tab) so the reference is actually usable, not just a local label ──
     const newRef = parseAddRef(raw);
     if (newRef) {
-      addReference({ name: newRef.name, price: newRef.price, color: 'purple' });
-      onSuccess(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
-      closeModal();
+      try {
+        const result = await salesApi.addReference(newRef.name, newRef.price);
+        if (!result.success) throw new Error(result.error ?? 'Erreur serveur');
+        addReference({ name: newRef.name, price: newRef.price, color: 'purple' });
+        onSuccess(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
+        closeModal();
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : 'Erreur réseau';
+        setTurns((t) => [...t, { from: 'ai', text: errMsg }]);
+        onError(errMsg);
+      }
       return;
     }
 
@@ -194,9 +204,10 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
         await updateStock({ product: stockIn.ref.name, qty: stockIn.qty });
         onSuccess(`+${stockIn.qty} boîte${stockIn.qty > 1 ? 's' : ''} de ${stockIn.ref.name} ✓`);
         closeModal();
-      } catch {
-        setTurns((t) => [...t, { from: 'ai', text: 'Erreur réseau — réessaie' }]);
-        onError('Erreur réseau');
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : 'Erreur réseau';
+        setTurns((t) => [...t, { from: 'ai', text: errMsg }]);
+        onError(errMsg);
       }
       return;
     }
