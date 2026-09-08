@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { useAllSalesData, useAchats, useDeleteSale, useUpdateSale } from '@/hooks/useSales';
 import { EditSaleModal } from '@/components/sales/EditSaleModal';
 import { useSalesStore } from '@/stores/salesStore';
@@ -45,14 +45,6 @@ export function VolantsPage() {
   const { toasts, addToast, addUndoToast, removeToast } = useToast();
 
   const undoTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('action') === 'nouvelle-vente') {
-      setSheetOpen(true);
-      window.history.replaceState(null, '', '/');
-    }
-  }, []);
 
   const handleDelete = useCallback((sale: Sale) => {
     if (!sale._row || !sale.produit) return;

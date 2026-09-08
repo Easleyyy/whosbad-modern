@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { ChatHomePage } from '@/pages/ChatHomePage';
 import { VolantsPage } from '@/pages/VolantsPage';
 import { TShirtsPage, EntrainementsPage, SettingsPage, PendingPage } from '@/pages/OtherPages';
 import { useAllSalesData } from '@/hooks/useSales';
@@ -45,7 +46,8 @@ export default function App() {
           <div className="flex flex-1 flex-col overflow-hidden">
             <main className="flex-1 overflow-hidden">
               <Routes>
-                <Route path="/" element={<VolantsPage />} />
+                <Route path="/" element={<ChatHomePage />} />
+                <Route path="/volants" element={<VolantsPage />} />
                 <Route path="/tshirts" element={<TShirtsPage />} />
                 <Route path="/entrainements" element={<EntrainementsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

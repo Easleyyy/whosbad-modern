@@ -26,8 +26,8 @@ export default defineConfig({
           {
             name: 'Nouvelle vente',
             short_name: 'Vente',
-            description: "Ouvrir l'assistant IA pour saisir une vente",
-            url: '/?action=nouvelle-vente',
+            description: "Ouvrir la dictée pour saisir une vente",
+            url: '/',
             icons: [{ src: '/icon-192.png', sizes: '192x192' }],
           },
           {

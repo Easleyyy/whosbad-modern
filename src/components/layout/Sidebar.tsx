@@ -2,7 +2,8 @@ import { NavLink } from 'react-router-dom';
 import { useAllSalesData } from '@/hooks/useSales';
 
 const NAV = [
-  { to: '/', label: 'Volants' },
+  { to: '/', label: 'Accueil' },
+  { to: '/volants', label: 'Volants' },
   { to: '/tshirts', label: 'T-Shirts' },
   { to: '/entrainements', label: 'Entraînements' },
   { to: '/pending', label: 'Impayés' },

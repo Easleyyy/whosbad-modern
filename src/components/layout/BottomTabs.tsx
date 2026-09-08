@@ -2,7 +2,8 @@ import { NavLink } from 'react-router-dom';
 import { useAllSalesData } from '@/hooks/useSales';
 
 const TABS = [
-  { to: '/', label: 'Volants' },
+  { to: '/', label: 'Accueil' },
+  { to: '/volants', label: 'Volants' },
   { to: '/tshirts', label: 'T-Shirts' },
   { to: '/entrainements', label: 'Entraîn.' },
   { to: '/pending', label: 'Impayés' },
