@@ -6,7 +6,7 @@ export { PendingPage } from './PendingPage';
 
 export function SettingsPage() {
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[680px]">
       <LedgerHeader title="Réglages" />
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
         <p className="font-serif text-[20px] text-ink">À venir</p>

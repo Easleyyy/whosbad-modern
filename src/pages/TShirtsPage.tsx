@@ -59,13 +59,13 @@ export function TShirtsPage() {
   const total = items.reduce((n: number, i: { quantite: number }) => n + i.quantite, 0);
 
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px]">
       <LedgerHeader
         title="Registre des maillots"
         caption={`${total} pièces réparties sur ${marques.length} modèle${marques.length !== 1 ? 's' : ''}`}
       />
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-12 lg:gap-y-2">
         {marques.map((marque) => {
           const mi = items.filter((i: { marque: string }) => i.marque === marque);
           const tailles = sortTailles([...new Set(mi.map((i: { taille: string }) => i.taille))]);
@@ -126,7 +126,7 @@ export function TShirtsPage() {
           );
         })}
 
-        <p className="border-t border-ink-rule pt-2.5 text-[11px] leading-[1.5] text-ink-55">
+        <p className="border-t border-ink-rule pt-2.5 text-[11px] leading-[1.5] text-ink-55 lg:col-span-2">
           Les zéros restent visibles : le registre montre les trous de stock au lieu de les cacher.
         </p>
       </div>
@@ -196,7 +196,7 @@ function QuantitySheet({
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] lg:max-w-[560px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
       >
         <h3 className="font-serif text-[22px] text-ink">{cell.marque}</h3>
         <p className="mb-6 font-mono text-[10px] font-medium tracking-kpi text-ink-45">
@@ -241,7 +241,7 @@ function AddLineSheet({
       <motion.div
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] space-y-4 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] lg:max-w-[560px] space-y-4 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
       >
         <h3 className="font-serif text-[22px] text-ink">Ajouter une ligne — {marque}</h3>
         <div className="grid grid-cols-2 gap-3">

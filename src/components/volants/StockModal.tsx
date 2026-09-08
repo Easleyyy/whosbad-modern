@@ -60,7 +60,7 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             style={{ y }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] lg:max-w-[560px] border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
           >
             <div {...bind()} className="touch-none">
               <div className="flex items-baseline justify-between">

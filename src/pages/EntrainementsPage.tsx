@@ -35,7 +35,7 @@ function AddPlayerSheet({ groupe, onSave, onClose, loading }: AddPlayerSheetProp
         onClick={onClose} className="fixed inset-0 z-40" style={{ background: 'rgba(40,30,22,.35)' }} />
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] space-y-4 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe">
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] lg:max-w-[560px] space-y-4 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe">
         <h3 className="font-serif text-[22px] text-ink">Ajouter un joueur — {groupe}</h3>
         <div>
           <label className={labelClass}>Nom</label>
@@ -122,7 +122,7 @@ export function EntrainementsPage() {
   const { groups, groupOrder } = data;
 
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[680px]">
       <LedgerHeader title="Entraînements" />
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5">

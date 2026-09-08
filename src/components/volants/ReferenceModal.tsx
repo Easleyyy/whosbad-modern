@@ -97,7 +97,7 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             style={{ y }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85vh] max-w-[480px] flex-col border-t-2 border-ink bg-paper"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[85vh] max-w-[480px] lg:max-w-[600px] flex-col border-t-2 border-ink bg-paper"
           >
             {/* Header */}
             <div {...bind()} className="touch-none px-5 pt-4 pb-3">

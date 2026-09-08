@@ -57,7 +57,7 @@ export function EditSaleModal({ sale, onSave, onClose, loading }: EditSaleModalP
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
         style={{ y }}
-        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] border-t-2 border-ink bg-paper pb-safe"
+        className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-[480px] lg:max-w-[560px] border-t-2 border-ink bg-paper pb-safe"
       >
         {/* Header */}
         <div className="px-5 pt-4 pb-3" {...bind()}>

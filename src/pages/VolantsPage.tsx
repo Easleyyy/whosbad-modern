@@ -117,7 +117,7 @@ export function VolantsPage() {
   }), [modelSales]);
 
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px]">
       <LedgerHeader
         title="Registre des volants"
         kpis={kpis}
@@ -128,67 +128,71 @@ export function VolantsPage() {
         ]}
       />
 
-      {/* Inventaire par modèle */}
-      <section className="flex-none px-[22px] pt-3 pb-1.5">
-        <div className="mb-1.5 font-mono text-[9px] font-medium tracking-label text-ink-45">
-          INVENTAIRE PAR MODÈLE
-        </div>
-        {models.map((m) => {
-          const state = stockState(m.stock);
-          const on = activeTab === m.name;
-          return (
+      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row lg:gap-10 lg:px-[22px] lg:pt-3">
+        {/* Inventaire par modèle */}
+        <section className="flex-none px-[22px] pt-3 pb-1.5 lg:w-[260px] lg:flex-shrink-0 lg:overflow-y-auto lg:border-r-[1.5px] lg:border-ink-rule lg:px-0 lg:pb-0 lg:pr-8 lg:pt-0">
+          <div className="mb-1.5 font-mono text-[9px] font-medium tracking-label text-ink-45">
+            INVENTAIRE PAR MODÈLE
+          </div>
+          {models.map((m) => {
+            const state = stockState(m.stock);
+            const on = activeTab === m.name;
+            return (
+              <button
+                key={m.name}
+                onClick={() => setActiveTab(on ? null : m.name)}
+                aria-label={`${m.name}, ${m.stock} boîtes en stock`}
+                aria-pressed={on}
+                className={`flex w-full items-baseline gap-2 py-[5px] text-left ${on ? 'border-b border-ink bg-ink/[.05]' : 'border-b border-dotted border-ink-dot'}`}
+              >
+                <span className="text-[12px] font-medium text-ink">{m.name}</span>
+                <span className="flex-1" />
+                <span className="font-mono text-[10px] font-medium" style={{ color: state.color }}>
+                  {state.word}
+                </span>
+                <span className="w-[34px] text-right font-mono text-[13px] font-semibold text-ink">{m.stock}</span>
+              </button>
+            );
+          })}
+        </section>
+
+        {/* Mouvements */}
+        <section className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5 lg:px-0 lg:pt-0">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">MOUVEMENTS</span>
             <button
-              key={m.name}
-              onClick={() => setActiveTab(on ? null : m.name)}
-              aria-label={`${m.name}, ${m.stock} boîtes en stock`}
-              aria-pressed={on}
-              className={`flex w-full items-baseline gap-2 py-[5px] text-left ${on ? 'border-b border-ink bg-ink/[.05]' : 'border-b border-dotted border-ink-dot'}`}
+              onClick={() => setSortAsc((v) => !v)}
+              className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
             >
-              <span className="text-[12px] font-medium text-ink">{m.name}</span>
-              <span className="flex-1" />
-              <span className="font-mono text-[10px] font-medium" style={{ color: state.color }}>
-                {state.word}
-              </span>
-              <span className="w-[34px] text-right font-mono text-[13px] font-semibold text-ink">{m.stock}</span>
+              {sortAsc ? 'ANCIEN' : 'RÉCENT'}
             </button>
-          );
-        })}
-      </section>
+          </div>
 
-      {/* Mouvements */}
-      <section className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5">
-        <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">MOUVEMENTS</span>
-          <button
-            onClick={() => setSortAsc((v) => !v)}
-            className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
-          >
-            {sortAsc ? 'ANCIEN' : 'RÉCENT'}
-          </button>
-        </div>
+          <div className="space-y-2 pb-2 lg:flex lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-2 lg:space-y-0">
+            <div className="lg:w-[220px] lg:flex-shrink-0">
+              <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
+            </div>
+            <DatePresetPills active={datePreset} onChange={setDatePreset} />
+            <FilterPills
+              active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
+              onChange={(s) => setFilters({ status: s })}
+              counts={counts}
+            />
+          </div>
 
-        <div className="space-y-2 pb-2">
-          <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
-          <DatePresetPills active={datePreset} onChange={setDatePreset} />
-          <FilterPills
-            active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
-            onChange={(s) => setFilters({ status: s })}
-            counts={counts}
-          />
-        </div>
-
-        {isLoading ? (
-          Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
-        ) : filtered.length === 0 ? (
-          <p className="py-10 text-center text-[12px] text-ink-45">
-            {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
-          </p>
-        ) : (
-          filtered.map((sale, i) => (
-            <SaleCard key={sale.id} sale={sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
-          ))
-        )}
-      </section>
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
+          ) : filtered.length === 0 ? (
+            <p className="py-10 text-center text-[12px] text-ink-45">
+              {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
+            </p>
+          ) : (
+            filtered.map((sale, i) => (
+              <SaleCard key={sale.id} sale={sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
+            ))
+          )}
+        </section>
+      </div>
 
       <DictationBar onClick={() => setSheetOpen(true)} />
 

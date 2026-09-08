@@ -14,7 +14,7 @@ export function BottomTabs() {
 
   return (
     <nav
-      className="flex flex-none gap-3.5 border-t border-ink-hairline bg-paper px-[22px] pt-3 pb-safe"
+      className="flex flex-none gap-3.5 border-t border-ink-hairline bg-paper px-[22px] pt-3 pb-safe lg:hidden"
     >
       {TABS.map(({ to, label }) => (
         <NavLink key={to} to={to} end={to === '/'} className="flex items-center gap-1 text-[11px]">

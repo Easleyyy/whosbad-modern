@@ -40,7 +40,7 @@ export function PendingPage() {
   , [pendingSales]);
 
   return (
-    <div className="flex h-full flex-col bg-paper">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[680px]">
       <LedgerHeader
         title="Impayés"
         kpis={[

@@ -268,7 +268,7 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             style={{ y }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80%] max-w-[480px] flex-col gap-2.5 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80%] max-w-[480px] lg:max-w-[560px] flex-col gap-2.5 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
           >
             <div {...bind()} className="flex touch-none items-baseline justify-between">
               <span className="font-serif text-[22px] text-ink">Dictée</span>
