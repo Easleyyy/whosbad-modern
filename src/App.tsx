@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { ChatHomePage } from '@/pages/ChatHomePage';
@@ -8,6 +8,26 @@ import { VolantsPage } from '@/pages/VolantsPage';
 import { TShirtsPage, EntrainementsPage, SettingsPage, PendingPage } from '@/pages/OtherPages';
 import { useAllSalesData } from '@/hooks/useSales';
 import { useNotifications } from '@/hooks/useNotifications';
+import { initPwaUpdate, applyPwaUpdate } from '@/lib/pwaUpdate';
+
+function UpdateBanner() {
+  const [needRefresh, setNeedRefresh] = useState(false);
+
+  useEffect(() => {
+    initPwaUpdate(() => setNeedRefresh(true));
+  }, []);
+
+  if (!needRefresh) return null;
+
+  return (
+    <button
+      onClick={applyPwaUpdate}
+      className="fixed inset-x-0 top-0 z-[100] flex items-center justify-center gap-2 border-b-[1.5px] border-ink bg-ink px-4 py-2 font-mono text-[10px] font-medium tracking-label text-paper"
+    >
+      NOUVELLE VERSION DISPONIBLE — TOUCHER POUR ACTUALISER
+    </button>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 2, staleTime: 30_000 } },
@@ -42,6 +62,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <div className="flex overflow-hidden bg-paper" style={{ height: '100dvh' }}>
+          <UpdateBanner />
           <Sidebar />
           <div className="flex flex-1 flex-col overflow-hidden">
             <main className="flex-1 overflow-hidden">

@@ -8,6 +8,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // We register the SW ourselves (src/lib/pwaUpdate.ts) so we can prompt
+      // the user to reload when a new version is ready, instead of silently
+      // leaving an already-open tab running stale JS indefinitely.
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: "Who's Bad Logistic",
