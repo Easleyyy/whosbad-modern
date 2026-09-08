@@ -169,6 +169,7 @@ export function TShirtsPage() {
         onClose={() => setSheetOpen(false)}
         onSuccess={(m) => addToast(m, 'success')}
         onError={(m) => addToast(m, 'error')}
+        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
       />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>

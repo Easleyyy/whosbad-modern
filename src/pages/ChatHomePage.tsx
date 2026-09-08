@@ -18,6 +18,7 @@ export function ChatHomePage() {
   } = useDictation({
     onSuccess: (msg) => addToast(msg, 'success'),
     onError: (msg) => addToast(msg, 'error'),
+    onSlow: () => addToast('Réveil du serveur… patiente quelques secondes', 'info'),
     keepHistory: true,
   });
 

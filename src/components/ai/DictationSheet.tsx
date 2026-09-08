@@ -7,14 +7,15 @@ interface Props {
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  onSlow?: () => void;
 }
 
-export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
+export function DictationSheet({ isOpen, onClose, onSuccess, onError, onSlow }: Props) {
   const { y, bind } = useModalGestures(isOpen, onClose);
   const {
     turns, elapsed, isPending, displayValue, setText,
     isListening, isSupported, start, stop, handleSend, references,
-  } = useDictation({ onSuccess, onError, onDone: onClose });
+  } = useDictation({ onSuccess, onError, onSlow, onDone: onClose });
 
   return (
     <AnimatePresence>

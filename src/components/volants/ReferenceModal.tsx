@@ -28,6 +28,7 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const resetState = () => {
     setEditingId(null);
@@ -73,6 +74,19 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
     setAdding(false);
     setForm({ name: ref.name, price: String(ref.price), color: ref.color });
     setError('');
+  };
+
+  const handleDelete = async (ref: ProductReference) => {
+    setDeletingId(ref.id);
+    try {
+      // Retire la ligne côté backend d'abord — sinon le produit reste vendable/
+      // réassortable depuis le chat même après avoir "disparu" de cette liste.
+      const result = await salesApi.deleteReference(ref.name);
+      if (!result.success) { setDeletingId(null); return; }
+      deleteReference(ref.id);
+    } catch {
+      setDeletingId(null);
+    }
   };
 
   const startAdd = () => {
@@ -131,8 +145,9 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
                       key={ref.id}
                       ref_={ref}
                       dragDisabled={isEditing}
+                      deleting={deletingId === ref.id}
                       onEdit={() => startEdit(ref)}
-                      onDelete={() => deleteReference(ref.id)}
+                      onDelete={() => handleDelete(ref)}
                     />
                   )
                 )}
@@ -176,11 +191,13 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
 function DraggableRefRow({
   ref_,
   dragDisabled,
+  deleting,
   onEdit,
   onDelete,
 }: {
   ref_: ProductReference;
   dragDisabled: boolean;
+  deleting?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -211,12 +228,12 @@ function DraggableRefRow({
 
         {/* Actions */}
         <div className="flex flex-shrink-0 items-center gap-3 font-mono text-[9px] tracking-label">
-          <button onPointerDown={(e) => e.stopPropagation()} onClick={onEdit} className="text-ink-45 hover:text-ink">
+          <button onPointerDown={(e) => e.stopPropagation()} onClick={onEdit} disabled={deleting} className="text-ink-45 hover:text-ink disabled:opacity-40">
             MODIF.
           </button>
           {!ref_.isDefault && (
-            <button onPointerDown={(e) => e.stopPropagation()} onClick={onDelete} className="text-ink-45 hover:text-alert">
-              SUPPR.
+            <button onPointerDown={(e) => e.stopPropagation()} onClick={onDelete} disabled={deleting} className="text-ink-45 hover:text-alert disabled:opacity-40">
+              {deleting ? '...' : 'SUPPR.'}
             </button>
           )}
         </div>

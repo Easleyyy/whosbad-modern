@@ -123,6 +123,10 @@ interface UseDictationOptions {
   onDone?: () => void;
   /** If true, the transcript is never cleared automatically (full-page chat). */
   keepHistory?: boolean;
+  /** Called once a backend call has been pending >3s — the free-tier backend can
+   *  take up to ~50s to wake from sleep, so this lets the UI explain the wait
+   *  instead of looking frozen. */
+  onSlow?: () => void;
 }
 
 /**
@@ -130,7 +134,7 @@ interface UseDictationOptions {
  * voice input, and the backend fallback. Used by both the DictationSheet (quick
  * access from any registre page) and the full-page chat landing screen.
  */
-export function useDictation({ onSuccess, onError, onDone, keepHistory }: UseDictationOptions) {
+export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }: UseDictationOptions) {
   const [text, setText] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -171,6 +175,17 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory }: UseDic
     return () => { if (timerRef.current) window.clearInterval(timerRef.current); };
   }, [isListening]);
 
+  /** Runs a backend call, firing onSlow if it's still pending after 3s (likely
+   *  a Render cold start) so the UI can explain the wait instead of looking stuck. */
+  const withWakeHint = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    const timer = window.setTimeout(() => onSlow?.(), 3000);
+    try {
+      return await fn();
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
+
   const finish = () => {
     setText('');
     reset();
@@ -202,7 +217,7 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory }: UseDic
     const newRef = parseAddRef(raw);
     if (newRef) {
       try {
-        const result = await salesApi.addReference(newRef.name, newRef.price);
+        const result = await withWakeHint(() => salesApi.addReference(newRef.name, newRef.price));
         if (!result.success) throw new Error(result.error ?? 'Erreur serveur');
         addReference({ name: newRef.name, price: newRef.price, color: 'purple' });
         succeed(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
@@ -216,7 +231,7 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory }: UseDic
     const stockIn = parseStockIn(raw, references);
     if (stockIn) {
       try {
-        await updateStock({ product: stockIn.ref.name, qty: stockIn.qty });
+        await withWakeHint(() => updateStock({ product: stockIn.ref.name, qty: stockIn.qty }));
         succeed(`+${stockIn.qty} boîte${stockIn.qty > 1 ? 's' : ''} de ${stockIn.ref.name} ✓`);
       } catch (e) {
         fail(e instanceof Error ? e.message : 'Erreur réseau');
@@ -241,7 +256,7 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory }: UseDic
 
     // ── 5. Backend — useAIChat injects the full catalogue automatically ────
     try {
-      const result = await sendChat(raw);
+      const result = await withWakeHint(() => sendChat(raw));
       if (result.success) {
         const msg = result.message ?? (
           result.action === 'modifier'        ? 'Vente(s) mise(s) à jour ✓'      :

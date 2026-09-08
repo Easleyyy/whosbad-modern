@@ -11,10 +11,11 @@ interface StockModalProps {
   onClose: () => void;
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
+  onSlow?: () => void;
   initialProduct?: string | null;
 }
 
-export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct }: StockModalProps) {
+export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initialProduct }: StockModalProps) {
   const { references } = useReferencesStore();
   const { y, bind } = useModalGestures(isOpen, onClose);
   const { mutateAsync: updateStock, isPending } = useStockUpdate();
@@ -38,12 +39,15 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, initialProduct
 
   const handleSubmit = async () => {
     if (!ref) return;
+    const slowTimer = window.setTimeout(() => onSlow?.(), 3000);
     try {
       await updateStock({ product: ref.name, qty });
       onSuccess(`+${qty} boîte${qty > 1 ? 's' : ''} de ${ref.name} ajouté${qty > 1 ? 'es' : ''} ✓`);
       onClose();
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Erreur réseau');
+    } finally {
+      window.clearTimeout(slowTimer);
     }
   };
 

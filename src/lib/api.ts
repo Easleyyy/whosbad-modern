@@ -2,9 +2,12 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://whosbad-backend.onrender.com';
 
+// Le backend gratuit (Render) s'endort après 15 min d'inactivité — un premier
+// appel peut prendre 30 à 50s le temps qu'il se réveille. Un timeout court ferait
+// échouer une vente/ajout qui aurait fini par passer. 60s laisse la marge.
 export const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000,
+  timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -33,6 +36,9 @@ export const salesApi = {
 
   addReference: (name: string, price: number) =>
     api.post<{ success: boolean; produit: string; prix: number; error?: string }>('/api/references/add', { name, price }).then((r) => r.data),
+
+  deleteReference: (name: string) =>
+    api.post<{ success: boolean; produit: string; error?: string }>('/api/references/delete', { name }).then((r) => r.data),
 
   add: (body: Record<string, unknown>) =>
     api.post<{ success: boolean }>('/api/add', body),

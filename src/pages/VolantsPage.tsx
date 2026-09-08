@@ -208,6 +208,7 @@ export function VolantsPage() {
         onClose={() => setSheetOpen(false)}
         onSuccess={(msg) => addToast(msg, 'success')}
         onError={(msg) => addToast(msg, 'error')}
+        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
       />
 
       <ReferenceModal isOpen={refModalOpen} onClose={() => setRefModalOpen(false)} />
@@ -218,6 +219,7 @@ export function VolantsPage() {
         initialProduct={activeTab}
         onSuccess={(msg) => addToast(msg, 'success')}
         onError={(msg) => addToast(msg, 'error')}
+        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
       />
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
