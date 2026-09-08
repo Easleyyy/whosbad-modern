@@ -47,7 +47,7 @@ export const SaleCard = ({ sale, index, onDelete, onEdit }: SaleCardProps) => {
     >
       <motion.div
         style={{ opacity: deleteOpacity }}
-        className="absolute inset-0 flex items-center justify-end pr-1"
+        className="pointer-events-none absolute inset-0 flex items-center justify-end pr-1"
       >
         <span className="font-mono text-[9px] font-semibold tracking-kpi text-alert">SUPPRIMER</span>
       </motion.div>

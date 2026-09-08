@@ -1,36 +1,54 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
-import { useAIChat, useStockUpdate, useAchats } from '@/hooks/useSales';
+import { useAIChat, useStockUpdate, useAchats, useAllSalesData } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
 import { useReferencesStore } from '@/stores/referencesStore';
 import type { ProductReference } from '@/types';
 
-// ─── Local parsers (unchanged from the previous AIAssistant) ──────────────────
+// ─── Local parsers ──────────────────────────────────────────────────────────
+// These give instant, backend-independent recognition for the most common
+// commands, across many phrasings, for ANY reference (default or custom).
+// Anything they don't recognise falls through to the backend chatbot, which
+// now always receives the live catalogue too (see useAIChat / useStockUpdate).
 
-/** Find the closest reference by name (case-insensitive, partial match) */
+/** Strip accents so "réçu"/"recu"/"reçu" etc. all match the same way. */
+function foldAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+const FILLER_WORDS = /\b(en\s*stock|boites?|boîtes?|cartons?|unites?|unités?|au\s*stock|de\s*stock|dispo(?:nibles?)?|restant(?:es?|s)?|s'?il\s*(?:te|vous)\s*plait)\b/gi;
+
+/** Find the closest reference by name (accent/case-insensitive, fuzzy partial match) */
 function findRef(text: string, refs: ProductReference[]): ProductReference | null {
-  const q = text.toLowerCase().trim()
-    .replace(/\b(en stock|boîtes?|boites?|cartons?|unités?|au stock)\b/gi, '')
-    .trim();
+  const clean = (s: string) => foldAccents(s.toLowerCase()).replace(FILLER_WORDS, '').replace(/[?!.,]/g, '').trim();
+  const q = clean(text);
   if (!q) return null;
+
+  const byName = (pred: (name: string) => boolean) => refs.find((r) => pred(clean(r.name)));
+
   return (
-    refs.find(r => r.name.toLowerCase() === q) ??
-    refs.find(r => q.includes(r.name.toLowerCase())) ??
-    refs.find(r => r.name.toLowerCase().includes(q)) ??
-    refs.find(r => {
-      const rw = r.name.toLowerCase().split(/\s+/);
-      return q.split(/\s+/).filter(w => w.length > 1)
-        .some(w => rw.some(x => x.startsWith(w) || w.startsWith(x)));
-    }) ??
+    byName((name) => name === q) ??
+    byName((name) => q.includes(name)) ??
+    byName((name) => name.includes(q)) ??
+    // Token overlap: pick the reference sharing the most whole/partial words with the query
+    refs
+      .map((r) => {
+        const rw = clean(r.name).split(/\s+/).filter(Boolean);
+        const qw = q.split(/\s+/).filter((w) => w.length > 1);
+        const score = qw.filter((w) => rw.some((x) => x === w || x.startsWith(w) || w.startsWith(x))).length;
+        return { r, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.r ??
     null
   );
 }
 
-/** Detect "nouvelle référence Victor C1 à 24€" */
+/** Detect "nouvelle référence Victor C1 à 24€" / "ajoute une réf X à 20 euros" */
 function parseAddRef(msg: string): { name: string; price: number } | null {
   const m = msg.match(
-    /(?:nouvelle?\s+réf(?:érence)?|ajouter?\s+(?:une?\s+)?(?:réf(?:érence)?|boite?|volant))\s+(.+?)\s+(?:à|a|:)?\s*(\d+(?:[,\.]\d+)?)\s*€?/i
+    /(?:nouvelle?\s+réf(?:érence)?|cré[eé]\s+(?:une?\s+)?réf(?:érence)?|ajouter?\s+(?:une?\s+)?(?:réf(?:érence)?|boite?|volant))\s+(.+?)\s+(?:à|a|pour|:)?\s*(\d+(?:[,\.]\d+)?)\s*(?:€|euros?)?/i
   );
   if (!m) return null;
   const price = parseFloat(m[2].replace(',', '.'));
@@ -38,32 +56,39 @@ function parseAddRef(msg: string): { name: string; price: number } | null {
   return { name: m[1].trim(), price };
 }
 
-/** Detect stock reception: "reçu 20 boites de NCS Pro", "j'ai reçu 15 Victor C1", "+12 Victor GM" */
+/** Detect stock reception, in many phrasings: "reçu 20 boites de NCS Pro", "on a reçu 15 Victor C1",
+ *  "+12 Victor GM", "réassort de 30 CBX Red", "10 Victor PC viennent d'arriver", "rentré 8 CBX Blue" */
 function parseStockIn(msg: string, refs: ProductReference[]): { ref: ProductReference; qty: number } | null {
   const PATTERNS = [
-    /(?:j'?\s*ai\s+)?(?:reçu?|réceptionné?|livraison|livré)\s+(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)(?:\s*$)/i,
-    /(\d+)\s+(?:boîtes?|boites?)\s+(?:de\s+)?(.+?)\s+(?:reçues?|livrées?|arrivées?)/i,
-    /ajouter?\s+(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)\s+(?:au\s+)?stock/i,
+    /(?:on\s+a\s+|j'?\s*ai\s+)?(?:reçu?|réceptionn[ée]|rentr[ée]e?|livr[ée]e?|livraison)\s+(?:de\s+)?(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)(?:\s*$)/i,
+    /(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)\s+(?:sont\s+arriv[ée]es?|viennent\s+d'arriver|reçues?|livrées?|arrivées?)/i,
+    /(?:ajouter?|mettre?|rajouter?)\s+(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+?)\s+(?:au\s+|en\s+)?stock/i,
+    /r[ée]assort\s+(?:de\s+)?(\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+)/i,
     /[+](\d+)\s+(?:boîtes?|boites?)?\s*(?:de\s+)?(.+)/i,
     /(\d+)\s+(?:boîtes?|boites?)\s+(?:de\s+)?(.+?)\s+(?:en\s+)?stock/i,
+    /stock\s+(.+?)\s*[+:]\s*(\d+)/i, // "stock Victor GM +20" (name then qty)
   ];
-  for (const p of PATTERNS) {
-    const m = msg.match(p);
+  for (let i = 0; i < PATTERNS.length; i++) {
+    const m = msg.match(PATTERNS[i]);
     if (!m) continue;
-    const qty = parseInt(m[1]);
+    // The last pattern captures name first, qty second — everything else is qty then name.
+    const [qtyStr, nameStr] = i === PATTERNS.length - 1 ? [m[2], m[1]] : [m[1], m[2]];
+    const qty = parseInt(qtyStr);
     if (isNaN(qty) || qty <= 0) continue;
-    const ref = findRef(m[2], refs);
+    const ref = findRef(nameStr, refs);
     if (ref) return { ref, qty };
   }
   return null;
 }
 
-/** Detect stock query: "combien de NCS Pro", "stock Victor C1" */
+/** Detect stock query: "combien de NCS Pro", "stock Victor C1 ?", "il reste quoi en CBX Red",
+ *  "y a-t-il du Victor GM", "j'ai encore combien de CBX Blue", "dispo pour Victor PC ?" */
 function parseStockQuery(msg: string, refs: ProductReference[]): ProductReference | null {
   const PATTERNS = [
-    /(?:combien|reste[- ]t[- ]il|quel\s+stock)\s+(?:de\s+)?(.+?)(?:\s*\?|\s+en\s+stock|$)/i,
-    /stock\s+(?:de\s+)?(.+?)(?:\s*\?|$)/i,
-    /(?:reste\s+(?:il|encore)?\s+(?:des?\s+)?)?(.+?)\s+(?:en\s+stock|restant)/i,
+    /(?:combien|il\s+(?:me\s+)?reste[- ]t[- ]il|quel\s+stock|reste[- ]t[- ]il)\s+(?:de\s+|il\s+reste\s+de\s+)?(.+?)(?:\s*\?|\s+en\s+stock|\s+restant(?:es?|s)?|$)/i,
+    /stock\s+(?:de\s+|du\s+)?(.+?)(?:\s*\?|$)/i,
+    /(?:y\s*a[- ]t[- ]il|as[- ]tu|avez[- ]vous)\s+(?:encore\s+)?(?:du\s+|des?\s+|de\s+la\s+)?(.+?)(?:\s+en\s+stock)?(?:\s*\?|$)/i,
+    /(.+?)\s+(?:il\s+en\s+reste\s+combien|en\s+stock|restant(?:es?|s)?)(?:\s*\?|$)/i,
   ];
   for (const p of PATTERNS) {
     const m = msg.match(p);
@@ -74,18 +99,16 @@ function parseStockQuery(msg: string, refs: ProductReference[]): ProductReferenc
   return null;
 }
 
-/** Detect price query: "prix Victor GM", "quel est le prix de NCS Pro" */
+/** Detect price query: "prix Victor GM", "quel est le prix de NCS Pro", "ça coûte combien un CBX Red",
+ *  "Victor PC c'est combien" */
 function parsePriceQuery(msg: string, refs: ProductReference[]): ProductReference | null {
-  const m = msg.match(/(?:prix|tarif|coûte?|vaut|combien|€)\s+(?:de\s+|du\s+|des?\s+)?(.+?)(?:\s*\?|$)/i)
-    ?? msg.match(/(?:quel\s+(?:est\s+le\s+)?)?(?:prix|tarif)\s+(?:d[eu]?\s+)?(.+?)(?:\s*\?|$)/i);
+  const m =
+    msg.match(/(?:quel\s+(?:est\s+le\s+)?)?(?:prix|tarif)\s+(?:d[eu]?\s+|des?\s+)?(.+?)(?:\s*\?|$)/i) ??
+    msg.match(/(.+?)\s+(?:c'est\s+combien|coûte\s+combien|ça\s+coûte\s+combien)(?:\s*\?|$)/i) ??
+    msg.match(/(?:combien\s+)?coûte\s+(?:un[e]?\s+|le\s+|la\s+)?(.+?)(?:\s*\?|$)/i) ??
+    msg.match(/(?:prix|tarif|coûte?|vaut)\s+(?:de\s+|du\s+|des?\s+)?(.+?)(?:\s*\?|$)/i);
   if (!m) return null;
   return findRef(m[1], refs);
-}
-
-/** Inject full catalogue into every backend message so it understands custom products */
-function withContext(message: string, refs: ProductReference[]): string {
-  const catalogue = refs.map(r => `• ${r.name} — ${r.price} €/boîte`).join('\n');
-  return `[Catalogue produits disponibles:\n${catalogue}]\n\nDemande: ${message}`;
 }
 
 function mmss(sec: number) {
@@ -111,10 +134,26 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
   const { mutateAsync: updateStock, isPending: stockPending } = useStockUpdate();
   const { references, addReference } = useReferencesStore();
   const { data: achats = {} } = useAchats();
+  const { data: allSales = [] } = useAllSalesData();
   const { y, bind } = useModalGestures(isOpen, onClose);
   const { isListening, transcript, isSupported, start, stop, reset } = useVoiceInput((final) => setText(final));
 
   const isPending = chatPending || stockPending;
+
+  // Net remaining stock (bought − sold), not the raw purchased total — matches
+  // the "EN STOCK" figure shown in the ledger, so voice/text queries never lie.
+  const netStock = useMemo(() => {
+    const sold: Record<string, number> = {};
+    for (const s of allSales) {
+      if (!s.produit) continue;
+      sold[s.produit] = (sold[s.produit] ?? 0) + s.quantite;
+    }
+    const result: Record<string, number> = {};
+    for (const ref of references) {
+      result[ref.name] = Math.max(0, (achats[ref.name] ?? 0) - (sold[ref.name] ?? 0));
+    }
+    return result;
+  }, [achats, allSales, references]);
 
   useEffect(() => {
     if (isListening) {
@@ -165,7 +204,7 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
     // ── 3. Stock query (local, instant) ────────────────────────────────────
     const stockRef = parseStockQuery(raw, references);
     if (stockRef) {
-      const inStock = achats[stockRef.name] ?? 0;
+      const inStock = netStock[stockRef.name] ?? 0;
       onSuccess(`${stockRef.name} : ${inStock} boîte${inStock !== 1 ? 's' : ''} en stock`);
       closeModal();
       return;
@@ -179,10 +218,9 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError }: Props) {
       return;
     }
 
-    // ── 5. Backend — with full catalogue context ────────────────────────────
+    // ── 5. Backend — useAIChat injects the full catalogue automatically ────
     try {
-      const enriched = withContext(raw, references);
-      const result = await sendChat(enriched);
+      const result = await sendChat(raw);
       if (result.success) {
         const msg = result.message ?? (
           result.action === 'modifier'        ? 'Vente(s) mise(s) à jour ✓'      :

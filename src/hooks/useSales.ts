@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/lib/api';
 import { useSalesStore } from '@/stores/salesStore';
 import { useReferencesStore } from '@/stores/referencesStore';
+import { withCatalogueContext } from '@/lib/aiContext';
 import type { Sale } from '@/types';
 
 function mapRow(row: Record<string, unknown>, produit: string, idx: number, price: number): Sale {
@@ -86,8 +87,10 @@ export function useUpdateSale() {
 
 export function useAIChat() {
   const qc = useQueryClient();
+  const { references } = useReferencesStore();
   return useMutation({
-    mutationFn: (message: string) => salesApi.chat(message).then((r) => r.data),
+    mutationFn: (message: string) =>
+      salesApi.chat(withCatalogueContext(message, references)).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['achats'] });
@@ -97,9 +100,12 @@ export function useAIChat() {
 
 export function useStockUpdate() {
   const qc = useQueryClient();
+  const { references } = useReferencesStore();
   return useMutation({
     mutationFn: ({ product, qty }: { product: string; qty: number }) =>
-      salesApi.chat(`J'ai reçu ${qty} boites de ${product}`).then((r) => r.data),
+      salesApi
+        .chat(withCatalogueContext(`J'ai reçu ${qty} boites de ${product}`, references))
+        .then((r) => r.data),
     onSuccess: (_, { product, qty }) => {
       qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({
         ...old,

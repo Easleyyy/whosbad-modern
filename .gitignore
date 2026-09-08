@@ -7,3 +7,6 @@ dist/
 
 # Local Netlify folder
 .netlify
+
+# Local Claude Code permission overrides
+.claude/settings.local.json
