@@ -6,10 +6,8 @@ import { cn } from '@/lib/utils';
 import { useModalGestures } from '@/hooks/useModalGestures';
 import type { Sale, PaymentStatus, PaymentMode } from '@/types';
 
-const PAYMENT_MODES: (PaymentMode | '')[] = [
-  '', 'Virement', 'Espèces', 'Chèque', 'CB',
-  'Square', 'Assoconnect', 'PayPal', 'Wero', 'Site internet', 'Autre',
-];
+const PAYMENT_MODES_CURRENT: PaymentMode[] = ['Square', 'Site internet', 'Lien de paiement', 'Virement'];
+const PAYMENT_MODES_LEGACY: PaymentMode[] = ['Espèces', 'Chèque', 'CB', 'Assoconnect', 'PayPal', 'Wero', 'Autre'];
 
 const PAYE_LABEL: Record<PaymentStatus, string> = { Oui: 'Payé', Non: 'En attente', '-': 'Soldé' };
 
@@ -97,7 +95,13 @@ export function EditSaleModal({ sale, onSave, onDelete, onClose, loading }: Edit
             <label className={labelClass}>Mode de paiement</label>
             <select value={mode} onChange={(e) => setMode(e.target.value as PaymentMode | '')}
               className={cn(fieldClass, 'appearance-none')}>
-              {PAYMENT_MODES.map((m) => <option key={m} value={m}>{m || '—'}</option>)}
+              <option value="">—</option>
+              <optgroup label="Actuels">
+                {PAYMENT_MODES_CURRENT.map((m) => <option key={m} value={m}>{m}</option>)}
+              </optgroup>
+              <optgroup label="Anciens">
+                {PAYMENT_MODES_LEGACY.map((m) => <option key={m} value={m}>{m}</option>)}
+              </optgroup>
             </select>
           </div>
 

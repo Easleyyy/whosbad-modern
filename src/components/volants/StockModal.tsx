@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
-import { useReferencesStore } from '@/stores/referencesStore';
-import { useStockUpdate, useReassortLog, useUpdateReassort, useDeleteReassort } from '@/hooks/useSales';
+import { useReferences, useStockUpdate, useReassortLog, useUpdateReassort, useDeleteReassort } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
 import { NumberStepper } from '@/components/ui/NumberStepper';
 import { cn } from '@/lib/utils';
-import type { ReassortEntry } from '@/types';
+import type { ReassortEntry, ProductReference } from '@/types';
 
 interface StockModalProps {
   isOpen: boolean;
@@ -18,32 +17,31 @@ interface StockModalProps {
 }
 
 export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initialProduct }: StockModalProps) {
-  const { references } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
   const { y, bind } = useModalGestures(isOpen, onClose);
   const { mutateAsync: updateStock, isPending } = useStockUpdate();
 
-  const firstId = references[0]?.id ?? '';
-  const [selectedId, setSelectedId] = useState(
-    initialProduct ? (references.find((r) => r.name === initialProduct)?.id ?? firstId) : firstId
-  );
+  const firstName = references[0]?.name ?? '';
+  const [selectedName, setSelectedName] = useState(initialProduct || firstName);
   const [qty, setQty] = useState(12);
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editQty, setEditQty] = useState(1);
 
   useEffect(() => {
-    if (isOpen && initialProduct) {
-      const ref = references.find((r) => r.name === initialProduct);
-      if (ref) setSelectedId(ref.id);
-    }
-  }, [isOpen, initialProduct, references]);
+    if (!selectedName && firstName) setSelectedName(firstName);
+  }, [selectedName, firstName]);
 
-  const ref = references.find((r) => r.id === selectedId);
+  useEffect(() => {
+    if (isOpen && initialProduct) setSelectedName(initialProduct);
+  }, [isOpen, initialProduct]);
+
+  const ref = references.find((r) => r.name === selectedName);
 
   const { data: log = [], isLoading: logLoading } = useReassortLog(ref?.name ?? null);
   const { mutateAsync: updateReassort, isPending: updatingReassort } = useUpdateReassort();
   const { mutateAsync: deleteReassort, isPending: deletingReassort } = useDeleteReassort();
 
-  useEffect(() => { setEditingRow(null); }, [selectedId]);
+  useEffect(() => { setEditingRow(null); }, [selectedName]);
 
   const handleSubmit = async () => {
     if (!ref) return;
@@ -116,11 +114,11 @@ export function StockModal({ isOpen, onClose, onSuccess, onError, onSlow, initia
               <p className="mb-2 font-mono text-[9px] font-medium tracking-label text-ink-45">PRODUIT</p>
               <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                 {references.map((r) => {
-                  const isSelected = selectedId === r.id;
+                  const isSelected = selectedName === r.name;
                   return (
                     <button
-                      key={r.id}
-                      onClick={() => setSelectedId(r.id)}
+                      key={r.name}
+                      onClick={() => setSelectedName(r.name)}
                       className={cn(
                         'text-[12px] transition-colors',
                         isSelected ? 'border-b-[1.5px] border-ink font-semibold text-ink' : 'text-ink-45'

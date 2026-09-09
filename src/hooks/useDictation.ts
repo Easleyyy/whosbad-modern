@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
-import { useAIChat, useStockUpdate, useAchats, useAllSalesData } from '@/hooks/useSales';
-import { useReferencesStore } from '@/stores/referencesStore';
-import { salesApi } from '@/lib/api';
+import { useAIChat, useStockUpdate, useAchats, useAllSalesData, useReferences, useAddReference } from '@/hooks/useSales';
 import type { ProductReference } from '@/types';
 
 // ─── Local parsers ──────────────────────────────────────────────────────────
@@ -152,7 +150,8 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
 
   const { mutateAsync: sendChat, isPending: chatPending } = useAIChat();
   const { mutateAsync: updateStock, isPending: stockPending } = useStockUpdate();
-  const { references, addReference } = useReferencesStore();
+  const { mutateAsync: addReference } = useAddReference();
+  const { data: references = [] as ProductReference[] } = useReferences();
   const { data: achats = {} } = useAchats();
   const { data: allSales = [] } = useAllSalesData();
   const { isListening, transcript, isSupported, start, stop, reset } = useVoiceInput((final) => setText(final));
@@ -249,9 +248,7 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
       const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : NaN;
       if (!isNaN(price) && price > 0) {
         try {
-          const result = await withWakeHint(() => salesApi.addReference(pending.name, price));
-          if (!result.success) throw new Error(result.error ?? 'Erreur serveur');
-          addReference({ name: pending.name, price, color: 'purple' });
+          await withWakeHint(() => addReference({ name: pending.name, price, color: 'purple' }));
 
           if (pending.qty) {
             await withWakeHint(() => updateStock({ product: pending.name, qty: pending.qty! }));
@@ -280,9 +277,7 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     const newRef = parseAddRef(raw);
     if (newRef) {
       try {
-        const result = await withWakeHint(() => salesApi.addReference(newRef.name, newRef.price));
-        if (!result.success) throw new Error(result.error ?? 'Erreur serveur');
-        addReference({ name: newRef.name, price: newRef.price, color: 'purple' });
+        await withWakeHint(() => addReference({ name: newRef.name, price: newRef.price, color: 'purple' }));
         succeed(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
       } catch (e) {
         fail(e instanceof Error ? e.message : 'Erreur réseau');

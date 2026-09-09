@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ReassortEntry } from '@/types';
+import type { ReassortEntry, ProductReference } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://whosbad-backend.onrender.com';
 
@@ -44,8 +44,14 @@ export const salesApi = {
   deleteReassort: (rowIndex: number, produit: string) =>
     api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/delete', { rowIndex, produit }).then((r) => r.data),
 
-  addReference: (name: string, price: number) =>
-    api.post<{ success: boolean; produit: string; prix: number; error?: string }>('/api/references/add', { name, price }).then((r) => r.data),
+  getReferences: () =>
+    api.get<{ success: boolean; references: Pick<ProductReference, 'name' | 'price' | 'color'>[] }>('/api/references').then((r) => r.data.references),
+
+  addReference: (name: string, price: number, color?: string) =>
+    api.post<{ success: boolean; produit: string; prix: number; error?: string }>('/api/references/add', { name, price, color }).then((r) => r.data),
+
+  updateReference: (name: string, updates: { newName?: string; newPrice?: number; newColor?: string }) =>
+    api.post<{ success: boolean; produit: string; prix: number; couleur: string; error?: string }>('/api/references/update', { name, ...updates }).then((r) => r.data),
 
   deleteReference: (name: string) =>
     api.post<{ success: boolean; produit: string; error?: string }>('/api/references/delete', { name }).then((r) => r.data),
@@ -60,7 +66,7 @@ export const salesApi = {
     api.delete<{ success: boolean }>('/api/delete', { data: { tab, rowIndex } }),
 
   chat: (message: string) =>
-    api.post<{ success: boolean; action: string; message: string; produit?: string; data?: unknown[] }>('/api/chat', { message }),
+    api.post<{ success: boolean; action: string; message: string; produit?: string; achats?: number; data?: unknown[] }>('/api/chat', { message }),
 };
 
 // ── T-Shirts ──────────────────────────────────────────────────────

@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
-import { GripVertical } from 'lucide-react';
-import { useReferencesStore } from '@/stores/referencesStore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useReferences, useAddReference, useUpdateReference, useDeleteReference } from '@/hooks/useSales';
 import { useModalGestures } from '@/hooks/useModalGestures';
-import { salesApi } from '@/lib/api';
 import { COLOR_OPTIONS, getColorHex, type ProductReference } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -21,17 +19,22 @@ interface FormState {
 const EMPTY_FORM: FormState = { name: '', price: '', color: 'purple' };
 
 export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
-  const { references, addReference, updateReference, deleteReference, reorderReferences } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
+  const { mutateAsync: addReference } = useAddReference();
+  const { mutateAsync: updateReference } = useUpdateReference();
+  const { mutateAsync: deleteReference } = useDeleteReference();
   const { y, bind } = useModalGestures(isOpen, onClose);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Both keyed by the reference's original name — the backend has no
+  // separate id concept, the product name IS the identity.
+  const [editingName, setEditingName] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingName, setDeletingName] = useState<string | null>(null);
 
   const resetState = () => {
-    setEditingId(null);
+    setEditingName(null);
     setAdding(false);
     setForm(EMPTY_FORM);
     setError('');
@@ -51,52 +54,57 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
     const price = parseFloat(form.price.replace(',', '.'));
     setSaving(true);
     try {
-      // Register on the backend first (creates the Stock row + sales tab) so
-      // the reference is actually usable for sales/stock, not just a local label.
-      const result = await salesApi.addReference(name, price);
-      if (!result.success) { setError(result.error ?? 'Erreur serveur'); setSaving(false); return; }
-      addReference({ name, price, color: form.color });
+      await addReference({ name, price, color: form.color });
       resetState();
-    } catch {
-      setError('Erreur réseau — la référence n\'a pas été créée');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur réseau — la référence n'a pas été créée");
       setSaving(false);
     }
   };
 
-  const handleSaveEdit = () => {
-    if (!editingId || !validateForm()) return;
-    updateReference(editingId, { name: form.name.trim(), price: parseFloat(form.price.replace(',', '.')), color: form.color });
-    resetState();
+  const handleSaveEdit = async () => {
+    if (!editingName || !validateForm()) return;
+    setSaving(true);
+    try {
+      await updateReference({
+        name: editingName,
+        newName: form.name.trim(),
+        newPrice: parseFloat(form.price.replace(',', '.')),
+        newColor: form.color,
+      });
+      resetState();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur réseau — la modification a échoué');
+      setSaving(false);
+    }
   };
 
   const startEdit = (ref: ProductReference) => {
-    setEditingId(ref.id);
+    setEditingName(ref.name);
     setAdding(false);
     setForm({ name: ref.name, price: String(ref.price), color: ref.color });
     setError('');
   };
 
   const handleDelete = async (ref: ProductReference) => {
-    setDeletingId(ref.id);
+    setDeletingName(ref.name);
     try {
-      // Retire la ligne côté backend d'abord — sinon le produit reste vendable/
-      // réassortable depuis le chat même après avoir "disparu" de cette liste.
-      const result = await salesApi.deleteReference(ref.name);
-      if (!result.success) { setDeletingId(null); return; }
-      deleteReference(ref.id);
+      await deleteReference(ref.name);
     } catch {
-      setDeletingId(null);
+      // La référence reste dans la liste — l'utilisateur peut réessayer.
+    } finally {
+      setDeletingName(null);
     }
   };
 
   const startAdd = () => {
     setAdding(true);
-    setEditingId(null);
+    setEditingName(null);
     setForm(EMPTY_FORM);
     setError('');
   };
 
-  const isEditing = !!editingId || adding;
+  const isEditing = !!editingName || adding;
 
   return (
     <AnimatePresence>
@@ -116,42 +124,38 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
             {/* Header */}
             <div {...bind()} className="touch-none px-5 pt-4 pb-3">
               <div className="flex items-baseline justify-between">
-                <div>
-                  <span className="font-serif text-[22px] text-ink">Références de volants</span>
-                  {!isEditing && <p className="mt-0.5 text-[11px] text-ink-55">Maintenez pour réordonner</p>}
-                </div>
+                <span className="font-serif text-[22px] text-ink">Références de volants</span>
                 <button onClick={onClose} className="font-mono text-[10px] font-medium tracking-kpi text-ink-45">
                   FERMER
                 </button>
               </div>
             </div>
 
-            {/* Reorderable list */}
+            {/* List */}
             <div className="flex-1 overflow-y-auto px-5 pb-2">
-              <Reorder.Group as="div" axis="y" values={references} onReorder={reorderReferences}>
-                {references.map((ref) =>
-                  editingId === ref.id ? (
-                    <Reorder.Item as="div" key={ref.id} value={ref} drag={false} className="py-2">
-                      <RefForm
-                        form={form}
-                        setForm={(f) => { setForm(f); setError(''); }}
-                        onSave={handleSaveEdit}
-                        onCancel={resetState}
-                        error={error}
-                      />
-                    </Reorder.Item>
-                  ) : (
-                    <DraggableRefRow
-                      key={ref.id}
-                      ref_={ref}
-                      dragDisabled={isEditing}
-                      deleting={deletingId === ref.id}
-                      onEdit={() => startEdit(ref)}
-                      onDelete={() => handleDelete(ref)}
+              {references.map((ref) =>
+                editingName === ref.name ? (
+                  <div key={ref.name} className="py-2">
+                    <RefForm
+                      form={form}
+                      setForm={(f) => { setForm(f); setError(''); }}
+                      onSave={handleSaveEdit}
+                      onCancel={resetState}
+                      error={error}
+                      saving={saving}
                     />
-                  )
-                )}
-              </Reorder.Group>
+                  </div>
+                ) : (
+                  <RefRow
+                    key={ref.name}
+                    ref_={ref}
+                    deleting={deletingName === ref.name}
+                    disabled={isEditing}
+                    onEdit={() => startEdit(ref)}
+                    onDelete={() => handleDelete(ref)}
+                  />
+                )
+              )}
 
               {adding && (
                 <div className="py-2">
@@ -169,7 +173,7 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
             </div>
 
             {/* Add button */}
-            {!adding && !editingId && (
+            {!adding && !editingName && (
               <div className="px-5 py-4 pb-safe">
                 <button
                   onClick={startAdd}
@@ -179,7 +183,7 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
                 </button>
               </div>
             )}
-            {(adding || editingId) && <div className="pb-safe h-4" />}
+            {(adding || editingName) && <div className="pb-safe h-4" />}
           </motion.div>
         </>
       )}
@@ -187,58 +191,40 @@ export function ReferenceModal({ isOpen, onClose }: ReferenceModalProps) {
   );
 }
 
-// Draggable row using useDragControls so only the handle triggers the drag
-function DraggableRefRow({
+function RefRow({
   ref_,
-  dragDisabled,
   deleting,
+  disabled,
   onEdit,
   onDelete,
 }: {
   ref_: ProductReference;
-  dragDisabled: boolean;
   deleting?: boolean;
+  disabled?: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const controls = useDragControls();
-
   return (
-    <Reorder.Item as="div" value={ref_} dragControls={controls} dragListener={false} className="touch-none">
-      <div className="flex items-center gap-3 border-b border-dotted border-ink-dot py-2.5 select-none">
-        {/* Drag handle */}
-        <div
-          onPointerDown={dragDisabled ? undefined : (e) => controls.start(e)}
-          className={cn(
-            'flex-shrink-0',
-            dragDisabled ? 'text-ink-30' : 'cursor-grab text-ink-40 active:cursor-grabbing hover:text-ink'
-          )}
-        >
-          <GripVertical className="w-4 h-4" />
-        </div>
+    <div className="flex items-center gap-3 border-b border-dotted border-ink-dot py-2.5 select-none">
+      {/* Color dot */}
+      <div className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getColorHex(ref_.color) }} />
 
-        {/* Color dot */}
-        <div className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: getColorHex(ref_.color) }} />
-
-        {/* Name + price */}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-medium text-ink">{ref_.name}</p>
-          <p className="font-mono text-[10px] text-ink-45">{ref_.price} € / boîte</p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-shrink-0 items-center gap-3 font-mono text-[9px] tracking-label">
-          <button onPointerDown={(e) => e.stopPropagation()} onClick={onEdit} disabled={deleting} className="text-ink-45 hover:text-ink disabled:opacity-40">
-            MODIF.
-          </button>
-          {!ref_.isDefault && (
-            <button onPointerDown={(e) => e.stopPropagation()} onClick={onDelete} disabled={deleting} className="text-ink-45 hover:text-alert disabled:opacity-40">
-              {deleting ? '...' : 'SUPPR.'}
-            </button>
-          )}
-        </div>
+      {/* Name + price */}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[12.5px] font-medium text-ink">{ref_.name}</p>
+        <p className="font-mono text-[10px] text-ink-45">{ref_.price} € / boîte</p>
       </div>
-    </Reorder.Item>
+
+      {/* Actions */}
+      <div className="flex flex-shrink-0 items-center gap-3 font-mono text-[9px] tracking-label">
+        <button onClick={onEdit} disabled={disabled} className="text-ink-45 hover:text-ink disabled:opacity-40">
+          MODIF.
+        </button>
+        <button onClick={onDelete} disabled={disabled || deleting} className="text-ink-45 hover:text-alert disabled:opacity-40">
+          {deleting ? '...' : 'SUPPR.'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -302,7 +288,7 @@ function RefForm({ form, setForm, onSave, onCancel, isNew, error, saving }: RefF
       <div className="flex gap-4 font-mono text-[10px] tracking-label">
         <button type="button" onClick={onCancel} disabled={saving} className="text-ink-45 hover:text-ink disabled:opacity-40">ANNULER</button>
         <button type="button" onClick={onSave} disabled={saving} className="font-semibold text-ink disabled:opacity-40">
-          {saving ? 'CRÉATION…' : isNew ? 'AJOUTER' : 'ENREGISTRER'}
+          {saving ? (isNew ? 'CRÉATION…' : 'ENREGISTREMENT…') : isNew ? 'AJOUTER' : 'ENREGISTRER'}
         </button>
       </div>
     </div>

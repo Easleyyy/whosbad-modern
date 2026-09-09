@@ -1,10 +1,10 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { useAllSalesData, useAchats, useDeleteSale, useUpdateSale } from '@/hooks/useSales';
+import { useAllSalesData, useAchats, useDeleteSale, useUpdateSale, useReferences, useAllReassortLog } from '@/hooks/useSales';
 import { EditSaleModal } from '@/components/sales/EditSaleModal';
 import { useSalesStore } from '@/stores/salesStore';
-import { useReferencesStore } from '@/stores/referencesStore';
 import { useToast } from '@/hooks/useToast';
 import { SaleCard } from '@/components/sales/SaleCard';
+import { ReassortCard } from '@/components/sales/ReassortCard';
 import { SaleCardSkeleton } from '@/components/ui/Skeleton';
 import { SearchBar } from '@/components/sales/SearchBar';
 import { FilterPills } from '@/components/sales/FilterPills';
@@ -16,13 +16,17 @@ import { ReferenceModal } from '@/components/volants/ReferenceModal';
 import { StockModal } from '@/components/volants/StockModal';
 import { ToastContainer } from '@/components/ui/Toast';
 import { filterSales, getDateRange } from '@/lib/utils';
-import type { Sale } from '@/types';
+import type { Sale, ProductReference, ReassortEntry } from '@/types';
 
 function parseTs(dateStr: string) {
   if (!dateStr) return 0;
   const [dd, mm, yy] = dateStr.split('/');
   return new Date(+yy, +mm - 1, +dd).getTime() || 0;
 }
+
+type Movement =
+  | { kind: 'vente'; date: string; sale: Sale }
+  | { kind: 'reassort'; date: string; entry: ReassortEntry };
 
 function stockState(qty: number) {
   if (qty === 0) return { word: 'rupture', color: 'rgba(40,30,22,.4)' };
@@ -32,7 +36,7 @@ function stockState(qty: number) {
 
 export function VolantsPage() {
   const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
-  const { references } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
@@ -40,6 +44,7 @@ export function VolantsPage() {
   const [editSale, setEditSale] = useState<Sale | null>(null);
   const { data: sales = [], isLoading } = useAllSalesData();
   const { data: achats = {} } = useAchats();
+  const { data: reassortEntries = [] } = useAllReassortLog();
   const { mutate: deleteSale } = useDeleteSale();
   const { mutateAsync: updateSale, isPending: updating } = useUpdateSale();
   const { toasts, addToast, addUndoToast, removeToast } = useToast();
@@ -91,15 +96,44 @@ export function VolantsPage() {
     [sales, activeTab]
   );
 
+  const modelReassort = useMemo(
+    () => (activeTab ? reassortEntries.filter((r) => r.produit === activeTab) : reassortEntries),
+    [reassortEntries, activeTab]
+  );
+
   const dateRange = useMemo(() => getDateRange(datePreset), [datePreset]);
 
-  const filtered = useMemo(() => {
-    const base = filterSales(modelSales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo);
-    return [...base].sort((a, b) => {
+  const filteredSales = useMemo(
+    () => filterSales(modelSales, filters.search ?? '', filters.status ?? 'all', dateRange.dateFrom, dateRange.dateTo),
+    [modelSales, filters, dateRange]
+  );
+
+  // Réassort n'a pas de statut de paiement — masqué dès qu'un filtre de statut
+  // autre que "Tous" est actif, plutôt que de l'ignorer silencieusement.
+  const filteredReassort = useMemo(() => {
+    if ((filters.status ?? 'all') !== 'all') return [];
+    const fromTs = dateRange.dateFrom ? parseTs(dateRange.dateFrom) : 0;
+    const toTs = dateRange.dateTo ? parseTs(dateRange.dateTo) + 86_400_000 - 1 : Infinity;
+    const q = (filters.search ?? '').toLowerCase();
+    return modelReassort.filter((r) => {
+      if (dateRange.dateFrom || dateRange.dateTo) {
+        const ts = parseTs(r.date);
+        if (ts < fromTs || ts > toTs) return false;
+      }
+      return q ? r.produit.toLowerCase().includes(q) : true;
+    });
+  }, [modelReassort, filters, dateRange]);
+
+  const movements = useMemo<Movement[]>(() => {
+    const combined: Movement[] = [
+      ...filteredSales.map((sale): Movement => ({ kind: 'vente', date: sale.date, sale })),
+      ...filteredReassort.map((entry): Movement => ({ kind: 'reassort', date: entry.date, entry })),
+    ];
+    return combined.sort((a, b) => {
       const diff = parseTs(a.date) - parseTs(b.date);
       return sortAsc ? diff : -diff;
     });
-  }, [modelSales, filters, dateRange, sortAsc]);
+  }, [filteredSales, filteredReassort, sortAsc]);
 
   const counts = useMemo(() => ({
     all: modelSales.length,
@@ -174,14 +208,24 @@ export function VolantsPage() {
 
           {isLoading ? (
             Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
-          ) : filtered.length === 0 ? (
+          ) : movements.length === 0 ? (
             <p className="py-10 text-center text-[12px] text-ink-45">
               {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
             </p>
           ) : (
-            filtered.map((sale, i) => (
-              <SaleCard key={sale.id} sale={sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
-            ))
+            movements.map((m, i) =>
+              m.kind === 'vente' ? (
+                <SaleCard key={m.sale.id} sale={m.sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
+              ) : (
+                <ReassortCard
+                  key={`reassort-${m.entry.produit}-${m.entry._row}`}
+                  entry={m.entry}
+                  index={i}
+                  onSuccess={(msg) => addToast(msg, 'success')}
+                  onError={(msg) => addToast(msg, 'error')}
+                />
+              )
+            )
           )}
         </section>
       </div>

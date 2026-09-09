@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/lib/api';
 import { useSalesStore } from '@/stores/salesStore';
-import { useReferencesStore } from '@/stores/referencesStore';
 import { withCatalogueContext } from '@/lib/aiContext';
-import type { Sale } from '@/types';
+import type { Sale, ProductReference } from '@/types';
 
 function mapRow(row: Record<string, unknown>, produit: string, idx: number, price: number): Sale {
   return {
@@ -21,9 +20,56 @@ function mapRow(row: Record<string, unknown>, produit: string, idx: number, pric
   };
 }
 
+// Références produit — désormais lues depuis le serveur (voir GET /api/references)
+// au lieu du localStorage, pour que desktop et mobile voient toujours le même
+// catalogue sans avoir à ajouter/renommer une référence sur chaque appareil.
+export function useReferences() {
+  return useQuery({
+    queryKey: ['references'],
+    queryFn: () => salesApi.getReferences(),
+    staleTime: 60_000,
+  });
+}
+
+export function useAddReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, price, color }: { name: string; price: number; color?: string }) => {
+      const result = await salesApi.addReference(name, price, color);
+      if (!result.success) throw new Error(result.error ?? 'Échec de la création');
+      return result;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
+export function useUpdateReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, newName, newPrice, newColor }: { name: string; newName?: string; newPrice?: number; newColor?: string }) => {
+      const result = await salesApi.updateReference(name, { newName, newPrice, newColor });
+      if (!result.success) throw new Error(result.error ?? 'Échec de la mise à jour');
+      return result;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
+export function useDeleteReference() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) => {
+      const result = await salesApi.deleteReference(name);
+      if (!result.success) throw new Error(result.error ?? 'Échec de la suppression');
+      return result;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['references'] }),
+  });
+}
+
 export function useSalesData() {
   const { activeTab } = useSalesStore();
-  const { references } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
   return useQuery({
     queryKey: ['sales', activeTab],
     queryFn: async () => {
@@ -41,7 +87,7 @@ export function useSalesData() {
 }
 
 export function useAllSalesData() {
-  const { references } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
   const refKey = references.map((r) => r.name).join('|');
   return useQuery({
     queryKey: ['sales', 'all', refKey],
@@ -87,13 +133,14 @@ export function useUpdateSale() {
 
 export function useAIChat() {
   const qc = useQueryClient();
-  const { references } = useReferencesStore();
+  const { data: references = [] as ProductReference[] } = useReferences();
   return useMutation({
     mutationFn: (message: string) =>
       salesApi.chat(withCatalogueContext(message, references)).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['achats'] });
+      qc.invalidateQueries({ queryKey: ['reassort'] });
     },
   });
 }
@@ -125,6 +172,24 @@ export function useReassortLog(produit: string | null) {
     queryKey: ['reassort', produit],
     queryFn: () => salesApi.getReassortLog(produit as string),
     enabled: !!produit,
+    staleTime: 30_000,
+  });
+}
+
+// Réassort log across every reference — same fan-out pattern as
+// useAllSalesData(), so the movements list can show stock-in entries
+// alongside sales instead of only inside the per-product Réassort modal.
+export function useAllReassortLog() {
+  const { data: references = [] as ProductReference[] } = useReferences();
+  const refKey = references.map((r) => r.name).join('|');
+  return useQuery({
+    queryKey: ['reassort', 'all', refKey],
+    queryFn: async () => {
+      const settled = await Promise.allSettled(
+        references.map((ref) => salesApi.getReassortLog(ref.name))
+      );
+      return settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    },
     staleTime: 30_000,
   });
 }

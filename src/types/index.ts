@@ -1,18 +1,19 @@
 export type PaymentMode =
-  | 'Virement' | 'Espèces' | 'Chèque' | 'CB'
-  | 'Square' | 'Assoconnect' | 'PayPal'
-  | 'Wero' | 'Site internet' | 'Autre';
+  | 'Square' | 'Site internet' | 'Lien de paiement' | 'Virement'
+  // Anciens modes — conservés pour ne pas casser l'historique des ventes déjà
+  // enregistrées avec ces valeurs, mais plus proposés en premier dans l'UI.
+  | 'Espèces' | 'Chèque' | 'CB' | 'Assoconnect' | 'PayPal' | 'Wero' | 'Autre';
 
 export type PaymentStatus = 'Oui' | 'Non' | '-';
 
-export type ProductTab = 'Victor GM' | 'Victor PC' | 'CBX RED' | 'CBX BLUE';
+export type ProductTab = 'Victor GM' | 'Victor C1' | 'Victor PC' | 'CBX RED' | 'CBX BLUE' | 'NCS Pro';
 
+// Le nom du produit est la clé (le backend n'a pas de notion d'id séparé) —
+// toujours lu depuis le serveur (voir useReferences()), plus de stockage local.
 export interface ProductReference {
-  id: string;
   name: string;
   price: number;
   color: string;
-  isDefault?: boolean;
 }
 
 export const COLOR_OPTIONS = [
