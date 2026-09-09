@@ -23,6 +23,12 @@ api.interceptors.response.use(
 
 // ── Sales ─────────────────────────────────────────────────────────
 export const salesApi = {
+  // GET /api/data has no per-tab filter — it always reads every registered
+  // product's sales tab in one round trip. Fetch it once (getAllData) rather
+  // than once per product, which used to multiply Sheets API reads sixfold.
+  getAllData: () =>
+    api.get<{ success: boolean; data: Record<string, unknown[]> }>('/api/data').then((r) => r.data.data),
+
   getAll: (tab: string) =>
     api.get<{ success: boolean; data: Record<string, unknown[]> }>('/api/data').then((r) => {
       const raw = r.data.data[tab] ?? [];

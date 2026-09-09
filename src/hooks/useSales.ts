@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/lib/api';
-import { useSalesStore } from '@/stores/salesStore';
 import { withCatalogueContext } from '@/lib/aiContext';
 import type { Sale, ProductReference } from '@/types';
 
@@ -67,39 +66,19 @@ export function useDeleteReference() {
   });
 }
 
-export function useSalesData() {
-  const { activeTab } = useSalesStore();
-  const { data: references = [] as ProductReference[] } = useReferences();
-  return useQuery({
-    queryKey: ['sales', activeTab],
-    queryFn: async () => {
-      if (!activeTab) return [];
-      const price = references.find((r) => r.name === activeTab)?.price ?? 22;
-      try {
-        const rows = await salesApi.getAll(activeTab);
-        return rows.map((r, i) => mapRow(r, activeTab, i, price));
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 60_000,
-  });
-}
-
+// Sales across every reference — ONE read of /api/data (which already
+// returns every product's tab at once) instead of one request per product.
 export function useAllSalesData() {
   const { data: references = [] as ProductReference[] } = useReferences();
   const refKey = references.map((r) => r.name).join('|');
   return useQuery({
     queryKey: ['sales', 'all', refKey],
     queryFn: async () => {
-      // Parallel fetching for all products
-      const settled = await Promise.allSettled(
-        references.map(async (ref) => {
-          const rows = await salesApi.getAll(ref.name);
-          return rows.map((r, i) => mapRow(r, ref.name, i, ref.price));
-        })
-      );
-      return settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+      const data = await salesApi.getAllData();
+      return references.flatMap((ref) => {
+        const rows = data[ref.name] ?? [];
+        return rows.map((row, i) => mapRow(row as Record<string, unknown>, ref.name, i, ref.price));
+      });
     },
     staleTime: 60_000,
   });
