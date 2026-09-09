@@ -35,8 +35,8 @@ export const salesApi = {
   addStock: (produit: string, qty: number) =>
     api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/add', { produit, qty }).then((r) => r.data),
 
-  getReassortLog: (produit: string) =>
-    api.get<{ success: boolean; log: ReassortEntry[] }>('/api/achats/log', { params: { produit } }).then((r) => r.data.log),
+  getReassortLog: (produit?: string) =>
+    api.get<{ success: boolean; log: ReassortEntry[] }>('/api/achats/log', { params: produit ? { produit } : {} }).then((r) => r.data.log),
 
   updateReassort: (rowIndex: number, produit: string, qty: number) =>
     api.post<{ success: boolean; produit: string; achats: number; error?: string }>('/api/achats/update', { rowIndex, produit, qty }).then((r) => r.data),

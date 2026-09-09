@@ -162,7 +162,7 @@ export function useStockUpdate() {
         ...old,
         [result.produit]: result.achats,
       }));
-      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
+      qc.invalidateQueries({ queryKey: ['reassort'] });
     },
   });
 }
@@ -176,20 +176,16 @@ export function useReassortLog(produit: string | null) {
   });
 }
 
-// Réassort log across every reference — same fan-out pattern as
-// useAllSalesData(), so the movements list can show stock-in entries
-// alongside sales instead of only inside the per-product Réassort modal.
+// Réassort log across every reference — a SINGLE unfiltered read (the backend
+// already returns the whole log when no `produit` is given), not one request
+// per product: fanning this out like useAllSalesData() does for per-product
+// sales tabs multiplied the Google Sheets API read load enough to trip its
+// per-minute quota, since every product's log lives in the same 'Reassort'
+// sheet anyway (unlike sales, which really are separate tabs per product).
 export function useAllReassortLog() {
-  const { data: references = [] as ProductReference[] } = useReferences();
-  const refKey = references.map((r) => r.name).join('|');
   return useQuery({
-    queryKey: ['reassort', 'all', refKey],
-    queryFn: async () => {
-      const settled = await Promise.allSettled(
-        references.map((ref) => salesApi.getReassortLog(ref.name))
-      );
-      return settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
-    },
+    queryKey: ['reassort', 'all'],
+    queryFn: () => salesApi.getReassortLog(),
     staleTime: 30_000,
   });
 }
@@ -204,7 +200,7 @@ export function useUpdateReassort() {
     },
     onSuccess: (result) => {
       qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({ ...old, [result.produit]: result.achats }));
-      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
+      qc.invalidateQueries({ queryKey: ['reassort'] });
     },
   });
 }
@@ -219,7 +215,7 @@ export function useDeleteReassort() {
     },
     onSuccess: (result) => {
       qc.setQueryData<Record<string, number>>(['achats'], (old = {}) => ({ ...old, [result.produit]: result.achats }));
-      qc.invalidateQueries({ queryKey: ['reassort', result.produit] });
+      qc.invalidateQueries({ queryKey: ['reassort'] });
     },
   });
 }
