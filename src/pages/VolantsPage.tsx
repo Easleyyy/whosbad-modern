@@ -12,6 +12,7 @@ import { DatePresetPills } from '@/components/sales/DatePresetPills';
 import { LedgerHeader } from '@/components/ledger/LedgerHeader';
 import { DictationBar } from '@/components/ai/DictationBar';
 import { DictationSheet } from '@/components/ai/DictationSheet';
+import { DictationPanel } from '@/components/ai/DictationPanel';
 import { ReferenceModal } from '@/components/volants/ReferenceModal';
 import { StockModal } from '@/components/volants/StockModal';
 import { ToastContainer } from '@/components/ui/Toast';
@@ -143,7 +144,7 @@ export function VolantsPage() {
   }), [modelSales]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px]">
+    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px] xl:max-w-[1440px]">
       <LedgerHeader
         title="Registre des volants"
         kpis={kpis}
@@ -154,7 +155,8 @@ export function VolantsPage() {
         ]}
       />
 
-      <div className="flex flex-1 flex-col overflow-hidden lg:flex-row lg:gap-10 lg:px-[22px] lg:pt-3">
+      <div className="flex flex-1 overflow-hidden lg:px-[22px]">
+      <div className="flex flex-1 flex-col overflow-hidden lg:min-w-0 lg:flex-row lg:gap-10 lg:pt-3">
         {/* Inventaire par modèle */}
         <section className="flex-none px-[22px] pt-3 pb-1.5 lg:w-[260px] lg:flex-shrink-0 lg:overflow-y-auto lg:border-r-[1.5px] lg:border-ink-rule lg:px-0 lg:pb-0 lg:pr-8 lg:pt-0">
           <div className="mb-1.5 font-mono text-[9px] font-medium tracking-label text-ink-45">
@@ -230,7 +232,16 @@ export function VolantsPage() {
         </section>
       </div>
 
-      <DictationBar onClick={() => setSheetOpen(true)} />
+      <DictationPanel
+        onSuccess={(msg) => addToast(msg, 'success')}
+        onError={(msg) => addToast(msg, 'error')}
+        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
+      />
+      </div>
+
+      <div className="xl:hidden">
+        <DictationBar onClick={() => setSheetOpen(true)} />
+      </div>
 
       {editSale && (
         <EditSaleModal
