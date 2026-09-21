@@ -2,10 +2,54 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import fs from 'fs';
+import type { Plugin } from 'vite';
+import { handleAdherents, type AdherentStore } from './netlify/lib/adherentsApi';
+
+/** `npm run dev` has no Netlify Functions: serve /api/adherents from a local JSON file
+ *  (.dev-data/, git-ignored) using the exact same handler as production. The dev list is
+ *  therefore separate from the real one — testing here never touches the club's data. */
+function devAdherents(): Plugin {
+  const file = path.resolve(__dirname, '.dev-data/adherents.json');
+  const store: AdherentStore = {
+    async read() {
+      try {
+        const names = JSON.parse(fs.readFileSync(file, 'utf8'));
+        return { names: Array.isArray(names) ? names : [], version: String(fs.statSync(file).mtimeMs) };
+      } catch {
+        return { names: [], version: undefined };
+      }
+    },
+    async write(names) {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(names, null, 2));
+      return true;
+    },
+  };
+  return {
+    name: 'dev-adherents',
+    configureServer(server) {
+      server.middlewares.use('/api/adherents', async (req, res) => {
+        const chunks: Buffer[] = [];
+        for await (const c of req) chunks.push(c as Buffer);
+        const body = chunks.length ? Buffer.concat(chunks) : undefined;
+        const request = new Request('http://localhost/api/adherents', {
+          method: req.method,
+          body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
+        });
+        const response = await handleAdherents(request, store);
+        res.statusCode = response.status;
+        response.headers.forEach((v, k) => res.setHeader(k, v));
+        res.end(await response.text());
+      });
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
     react(),
+    devAdherents(),
     VitePWA({
       registerType: 'autoUpdate',
       // We register the SW ourselves (src/lib/pwaUpdate.ts) so we can prompt

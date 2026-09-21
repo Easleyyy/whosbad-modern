@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { useAIChat, useStockUpdate, useAchats, useAllSalesData, useReferences, useAddReference } from '@/hooks/useSales';
-import type { ProductReference } from '@/types';
+import { useMembers } from '@/hooks/useMembers';
+import { useTshirtsLoader, useUpdateTshirt, useAddTshirt } from '@/hooks/useTshirts';
+import { extractBuyers, memberKey, normalizeMemberName, parseAddMembers, parseRemoveMembers } from '@/lib/members';
+import { fillTshirtIntent, isTshirtMessage, parseTshirtIntent, planTshirt, type TshirtIntent } from '@/lib/tshirtCommands';
+import { foldAccents } from '@/lib/text';
+import { COLOR_OPTIONS, type ChatResponse, type ProductReference } from '@/types';
 
 // ─── Local parsers ──────────────────────────────────────────────────────────
 // These give instant, backend-independent recognition for the most common
 // commands, across many phrasings, for ANY reference (default or custom).
 // Anything they don't recognise falls through to the backend chatbot, which
 // always receives the live catalogue too (see useAIChat / useStockUpdate).
-
-/** Strip accents so "réçu"/"recu"/"reçu" etc. all match the same way. */
-function foldAccents(s: string): string {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
-}
 
 const FILLER_WORDS = /\b(en\s*stock|boites?|boîtes?|cartons?|unites?|unités?|au\s*stock|de\s*stock|dispo(?:nibles?)?|restant(?:es?|s)?|s'?il\s*(?:te|vous)\s*plait)\b/gi;
 
@@ -42,15 +42,49 @@ function findRef(text: string, refs: ProductReference[]): ProductReference | nul
   );
 }
 
-/** Detect "nouvelle référence Victor C1 à 24€" / "ajoute une réf X à 20 euros" */
-function parseAddRef(msg: string): { name: string; price: number } | null {
-  const m = msg.match(
-    /(?:nouvelle?\s+réf(?:érence)?|cré[eé]\s+(?:une?\s+)?réf(?:érence)?|ajouter?\s+(?:une?\s+)?(?:réf(?:érence)?|boite?|volant))\s+(.+?)\s+(?:à|a|pour|:)?\s*(\d+(?:[,\.]\d+)?)\s*(?:€|euros?)?/i
+/** Detect "nouvelle référence Victor C1 à 24€", "ajoute une nouvelle réf NCS Pro 20 euros",
+ *  "crée le volant Yonex AS50 à 25", "ajouter un modèle X". The price is optional — when it's
+ *  missing the caller asks for it instead of dropping the command. */
+export function parseAddRef(msg: string): { name: string; price: number | null } | null {
+  const KIND = String.raw`(?:r[ée]f(?:[ée]rences?)?|volants?|mod[èe]les?|produits?|bo[iî]te)`;
+  const VERB = String.raw`(?:ajoute[rz]?|rajoute[rz]?|cr[ée]{1,2}[rz]?|enregistre[rz]?|rentre[rz]?)`;
+  const head = msg.match(
+    new RegExp(
+      String.raw`(?:nouvel(?:le)?s?|nouveau)\s+${KIND}|${VERB}\s+(?:une?\s+|la\s+|le\s+)?(?:nouvel(?:le)?s?\s+|nouveau\s+)?${KIND}`,
+      'i'
+    )
   );
-  if (!m) return null;
-  const price = parseFloat(m[2].replace(',', '.'));
-  if (!m[1].trim() || isNaN(price) || price <= 0) return null;
-  return { name: m[1].trim(), price };
+  if (!head || head.index === undefined) return null;
+
+  let rest = msg
+    .slice(head.index + head[0].length)
+    .replace(/^\s*(?:de\s+volants?\b)?\s*[:\-–]?\s*/i, '')
+    .replace(/\s+(?:au|dans\s+le)\s+catalogue\b/gi, '')
+    .trim();
+  if (!rest || /^(?:de|du|des|d['’])\b/i.test(rest)) return null; // "ajoute des boîtes de X" is a stock command
+
+  const tail = rest.match(
+    /^(.*?)(?:\s+(à|a|pour|au\s+prix\s+de|prix(?:\s+de)?|au\s+tarif\s+de|tarif|:|=|-)\s*|\s+)(\d+(?:[.,]\d+)?)\s*(€|eur(?:os?)?)?(?:\s*(?:la\s+bo[iî]te|\/\s*bo[iî]te|l['’]unit[ée]|pi[eè]ce|par\s+bo[iî]te))?\s*[.!]?\s*$/i
+  );
+  const clean = (n: string) => n.replace(/[«»"“”]/g, '').replace(/[.,;:!?]+$/g, '').trim();
+
+  if (tail) {
+    const name = clean(tail[1]);
+    const price = parseFloat(tail[3].replace(',', '.'));
+    // "à 24", "24 €" are unambiguous. A bare trailing number is only a price when the name has
+    // several words already ("Victor C1 24") and it looks like one ("Babolat Team 2" is a name).
+    const marked = !!tail[2] || !!tail[4];
+    const plausibleBare = name.split(/\s+/).length >= 2 && price >= 5 && price <= 150;
+    if (name && price > 0 && (marked || plausibleBare)) return { name, price };
+  }
+  rest = clean(rest);
+  return rest ? { name: rest, price: null } : null;
+}
+
+/** First palette colour no reference uses yet, so new references stay distinguishable. */
+function pickColor(refs: ProductReference[]): string {
+  const used = new Set(refs.map((r) => r.color));
+  return COLOR_OPTIONS.find((c) => !used.has(c.id))?.id ?? 'purple';
 }
 
 /** Detect stock reception, in many phrasings: "reçu 20 boites de NCS Pro", "on a reçu 15 Victor C1",
@@ -139,24 +173,32 @@ interface UseDictationOptions {
 /** A named product was used (sale or stock-in) but isn't a known reference yet —
  *  we ask for its price, then either apply `qty` directly (stock-in) or replay
  *  `raw` through the backend once the reference exists (sale). */
-type PendingUnknownRef = { raw: string; name: string; qty?: number };
+type PendingUnknownRef = { raw: string; name: string; qty?: number; /** only create the reference, nothing to replay */ createOnly?: boolean };
 
 export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }: UseDictationOptions) {
   const [text, setText] = useState('');
   const [turns, setTurns] = useState<Turn[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [pendingUnknown, setPendingUnknown] = useState<PendingUnknownRef | null>(null);
+  /** A maillot command missing its model/size/sex/quantity, waiting for the answer. */
+  const [pendingTshirt, setPendingTshirt] = useState<TshirtIntent | null>(null);
+  /** The backend asked something back ("Tu veux dire X ou Y ?") — the next message answers it. */
+  const [followUp, setFollowUp] = useState<{ user: string; ai: string } | null>(null);
   const timerRef = useRef<number | null>(null);
 
   const { mutateAsync: sendChat, isPending: chatPending } = useAIChat();
   const { mutateAsync: updateStock, isPending: stockPending } = useStockUpdate();
   const { mutateAsync: addReference } = useAddReference();
+  const { mutateAsync: updateTshirt, isPending: tshirtUpdating } = useUpdateTshirt();
+  const { mutateAsync: addTshirt, isPending: tshirtAdding } = useAddTshirt();
+  const loadTshirts = useTshirtsLoader();
+  const { members, addMember, removeMember, isShared } = useMembers();
   const { data: references = [] as ProductReference[] } = useReferences();
   const { data: achats = {} } = useAchats();
   const { data: allSales = [] } = useAllSalesData();
   const { isListening, transcript, isSupported, start, stop, reset } = useVoiceInput((final) => setText(final));
 
-  const isPending = chatPending || stockPending;
+  const isPending = chatPending || stockPending || tshirtUpdating || tshirtAdding;
 
   // Net remaining stock (bought − sold), not the raw purchased total — matches
   // the "EN STOCK" figure shown in the ledger, so voice/text queries never lie.
@@ -228,6 +270,55 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
       'Enregistré !'
     );
 
+  const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Erreur réseau');
+
+  /** Sends a message to the backend chatbot with the catalogue + adhérents directory attached. */
+  const chat = (message: string, fu?: { user: string; ai: string } | null) =>
+    sendChat({ message, members, followUp: fu ?? undefined });
+
+  /** After a sale: anyone not yet in the directory joins it, so next time they're recognised. */
+  const registerBuyers = (result: ChatResponse): string[] => {
+    if (result.action !== 'vente' && result.action !== 'square_payment') return [];
+    const fresh: string[] = [];
+    for (const buyer of extractBuyers(result)) {
+      const name = normalizeMemberName(buyer); // single first names can't be filed as "Prénom NOM"
+      if (!name || members.some((m) => memberKey(m) === memberKey(name))) continue;
+      void addMember(name); // the sale row already makes them known; this files them in the shared list too
+      fresh.push(name);
+    }
+    return fresh;
+  };
+
+  const describeSale = (result: ChatResponse) => {
+    const fresh = registerBuyers(result);
+    const base = describeChatResult(result);
+    return fresh.length ? `${base} · nouvel adhérent : ${fresh.join(', ')}` : base;
+  };
+
+  const applyTshirtPlan = async (intent: TshirtIntent, data: Awaited<ReturnType<typeof loadTshirts>>) => {
+    const plan = planTshirt(intent, data);
+    switch (plan.kind) {
+      case 'ask':
+        ask(plan.message);
+        setPendingTshirt(plan.intent);
+        return;
+      case 'fail':
+        fail(plan.message);
+        return;
+      case 'answer':
+        succeed(plan.message);
+        return;
+      case 'write':
+        if (plan.exists) {
+          await updateTshirt({ marque: plan.marque, sexe: plan.sexe, taille: plan.taille, nouvelle_quantite: plan.to });
+        } else {
+          await addTshirt({ marque: plan.marque, sexe: plan.sexe, taille: plan.taille, quantite: plan.to });
+        }
+        succeed(plan.message);
+        return;
+    }
+  };
+
   const handleSend = async () => {
     const raw = (isListening ? transcript : text).trim();
     if (!raw) return;
@@ -236,9 +327,12 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     setText('');
     if (isListening) { stop(); reset(); }
 
+    const previousExchange = followUp;
+    setFollowUp(null);
+
     // ── 0. Resolve a pending "je ne connais pas ce produit, quel prix ?" ───
-    // Covers both stock-in ("+15 NCS Pro") and sales ("2 NCS Pro pour David")
-    // of a product that isn't a known reference yet — instead of just
+    // Covers stock-in ("+15 NCS Pro"), sales ("2 NCS Pro pour David") and an
+    // explicit "nouvelle référence X" typed without a price — instead of just
     // rejecting it, we ask for a price, create the reference, then either
     // apply the stock movement directly or replay the original sale.
     if (pendingUnknown) {
@@ -248,23 +342,25 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
       const price = priceMatch ? parseFloat(priceMatch[1].replace(',', '.')) : NaN;
       if (!isNaN(price) && price > 0) {
         try {
-          await withWakeHint(() => addReference({ name: pending.name, price, color: 'purple' }));
+          await withWakeHint(() => addReference({ name: pending.name, price, color: pickColor(references) }));
 
-          if (pending.qty) {
+          if (pending.createOnly) {
+            succeed(`Référence « ${pending.name} » créée à ${price} € ✓`);
+          } else if (pending.qty) {
             await withWakeHint(() => updateStock({ product: pending.name, qty: pending.qty! }));
             succeed(`Référence « ${pending.name} » créée à ${price} € — +${pending.qty} boîte${pending.qty > 1 ? 's' : ''} ✓`);
           } else {
-            const chatResult = await withWakeHint(() => sendChat(pending.raw));
+            const chatResult = await withWakeHint(() => chat(pending.raw));
             if (chatResult.action === 'produit_inconnu') {
               fail(`Référence créée, mais je n'ai pas retrouvé « ${pending.name} » dans ta phrase — réessaie en la réécrivant`);
             } else if (chatResult.success) {
-              succeed(`Référence « ${pending.name} » créée à ${price} € — ${describeChatResult(chatResult)}`);
+              succeed(`Référence « ${pending.name} » créée à ${price} € — ${describeSale(chatResult)}`);
             } else {
               fail("Référence créée, mais le chatbot n'a pas compris la suite. Reformule ?");
             }
           }
         } catch (e) {
-          fail(e instanceof Error ? e.message : 'Erreur réseau');
+          fail(errMsg(e));
         }
         return;
       }
@@ -272,20 +368,124 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
       // process this message normally instead of getting stuck.
     }
 
-    // ── 1. Add reference — registers on the backend first (Stock row + sales
-    //      tab) so the reference is actually usable, not just a local label ──
-    const newRef = parseAddRef(raw);
-    if (newRef) {
+    // ── 0b. Resolve a pending maillot question ("quel modèle ?", "quelle taille ?"…) ──
+    if (pendingTshirt) {
+      const pending = pendingTshirt;
+      setPendingTshirt(null);
       try {
-        await withWakeHint(() => addReference({ name: newRef.name, price: newRef.price, color: 'purple' }));
-        succeed(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
+        const data = await withWakeHint(() => loadTshirts());
+        const filled = fillTshirtIntent(pending, raw, data.marques);
+        if (filled) {
+          await applyTshirtPlan(filled, data);
+          return;
+        }
       } catch (e) {
-        fail(e instanceof Error ? e.message : 'Erreur réseau');
+        fail(errMsg(e));
+        return;
+      }
+      // Nothing usable in the reply → the user moved on; handle it as a fresh message.
+    }
+
+    // ── 1. Add adhérent(s) — "ajoute l'adhérent Lucas MARTIN" ───────────────
+    const memberNames = parseAddMembers(raw);
+    if (memberNames) {
+      const toAdd: string[] = [];
+      const already: string[] = [];
+      const invalid: string[] = [];
+      const seen = new Set(members.map(memberKey));
+      for (const typed of memberNames) {
+        const name = normalizeMemberName(typed);
+        if (!name) { invalid.push(typed); continue; }
+        const key = memberKey(name);
+        if (seen.has(key)) {
+          already.push(members.find((m) => memberKey(m) === key) ?? name);
+          continue;
+        }
+        seen.add(key);
+        toAdd.push(name);
+      }
+      const results = await Promise.all(toAdd.map((n) => addMember(n)));
+      const offline = results.some((r) => !r.synced);
+      const notes = [
+        already.length ? `déjà dans la liste : ${already.join(', ')}` : '',
+        invalid.length ? `il me manque le nom (Prénom NOM) : ${invalid.join(', ')}` : '',
+        offline ? '⚠ serveur injoignable : gardé sur cet appareil, synchronisé dès que possible' : '',
+      ].filter(Boolean);
+      if (toAdd.length) {
+        succeed(`${toAdd.join(', ')} ajouté${toAdd.length > 1 ? 's' : ''} aux adhérents ✓${notes.length ? ` · ${notes.join(' · ')}` : ''}`);
+      } else if (already.length && !invalid.length) {
+        succeed(already.length === 1 ? `${already[0]} est déjà dans la liste des adhérents` : `Déjà dans la liste : ${already.join(', ')}`);
+      } else {
+        fail(`Il me faut le prénom ET le nom pour ajouter un adhérent — ex : « Lucas MARTIN »${invalid.length ? ` (reçu : ${invalid.join(', ')})` : ''}`);
       }
       return;
     }
 
-    // ── 2. Stock reception (local for speed & custom product support) ──────
+    // ── 1b. Remove adhérent(s) from the shared list — fixes a typo'd name ────
+    const removeNames = parseRemoveMembers(raw);
+    if (removeNames) {
+      const removed: string[] = [];
+      const notes: string[] = [];
+      try {
+        for (const typed of removeNames) {
+          const known = members.find((m) => memberKey(m) === memberKey(normalizeMemberName(typed) ?? typed));
+          if (!known) { notes.push(`« ${typed} » n'est pas dans la liste`); continue; }
+          if (!isShared(known)) { notes.push(`${known} vient des ventes ou des entraînements, je ne peux pas le retirer d'ici`); continue; }
+          await removeMember(known);
+          removed.push(known);
+        }
+      } catch (e) {
+        fail(errMsg(e));
+        return;
+      }
+      const tail = notes.length ? ` · ${notes.join(' · ')}` : '';
+      if (removed.length) succeed(`${removed.join(', ')} retiré${removed.length > 1 ? 's' : ''} de la liste des adhérents ✓${tail}`);
+      else fail(notes.join(' · '));
+      return;
+    }
+
+    // ── 2. Add reference — registers on the backend first (Stock row + sales
+    //      tab) so the reference is actually usable, not just a local label ──
+    const newRef = parseAddRef(raw);
+    if (newRef) {
+      const clash = references.find((r) => foldAccents(r.name).toLowerCase() === foldAccents(newRef.name).toLowerCase());
+      if (clash) {
+        fail(`« ${clash.name} » existe déjà (${clash.price} € / boîte)`);
+        return;
+      }
+      if (newRef.price === null) {
+        ask(`Quel est le prix de « ${newRef.name} » ? (ex: 20€)`);
+        setPendingUnknown({ raw, name: newRef.name, createOnly: true });
+        return;
+      }
+      try {
+        await withWakeHint(() => addReference({ name: newRef.name, price: newRef.price!, color: pickColor(references) }));
+        succeed(`Référence « ${newRef.name} » ajoutée à ${newRef.price} € ✓`);
+      } catch (e) {
+        fail(errMsg(e));
+      }
+      return;
+    }
+
+    // ── 3. Maillots / t-shirts — must come before stock-in: "reçu 20 maillots
+    //      femme M" would otherwise be read as a volant delivery of a product
+    //      called "maillots femme M" ──────────────────────────────────────────
+    if (isTshirtMessage(raw)) {
+      try {
+        const data = await withWakeHint(() => loadTshirts());
+        const intent = parseTshirtIntent(raw, data.marques);
+        if (!intent) {
+          fail('Ajouter ou fixer ? Écris « reçu 12 maillots … » pour ajouter, ou « mets … à 12 » pour fixer le stock');
+          return;
+        }
+        await applyTshirtPlan(intent, data);
+      } catch (e) {
+        fail(errMsg(e));
+      }
+      return;
+    }
+
+    // ── 4. Stock reception (local for speed & custom product support) ──────
     const stockIn = parseStockIn(raw, references);
     if (stockIn) {
       if (!stockIn.ref) {
@@ -297,12 +497,12 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
         await withWakeHint(() => updateStock({ product: stockIn.ref!.name, qty: stockIn.qty }));
         succeed(`+${stockIn.qty} boîte${stockIn.qty > 1 ? 's' : ''} de ${stockIn.ref.name} ✓`);
       } catch (e) {
-        fail(e instanceof Error ? e.message : 'Erreur réseau');
+        fail(errMsg(e));
       }
       return;
     }
 
-    // ── 3. Stock query (local, instant) ────────────────────────────────────
+    // ── 5. Stock query (local, instant) ────────────────────────────────────
     const stockRef = parseStockQuery(raw, references);
     if (stockRef) {
       const inStock = netStock[stockRef.name] ?? 0;
@@ -310,21 +510,26 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
       return;
     }
 
-    // ── 4. Price query (local) ─────────────────────────────────────────────
+    // ── 6. Price query (local) ─────────────────────────────────────────────
     const priceRef = parsePriceQuery(raw, references);
     if (priceRef) {
       succeed(`${priceRef.name} : ${priceRef.price} € / boîte`);
       return;
     }
 
-    // ── 5. Backend — useAIChat injects the full catalogue automatically ────
+    // ── 7. Backend — catalogue + adhérents directory attached automatically ─
     try {
-      const result = await withWakeHint(() => sendChat(raw));
+      const result = await withWakeHint(() => chat(raw, previousExchange));
       if (result.action === 'produit_inconnu' && result.produit) {
         ask(result.message ?? `Je ne connais pas « ${result.produit} ». Quel est son prix ?`);
         setPendingUnknown({ raw, name: result.produit });
+      } else if (result.action === 'conversation' && result.message?.includes('?')) {
+        // The backend is asking something back ("Tu veux dire X ou Y ?") — keep the
+        // conversation open and hand it this exchange with the next message.
+        ask(result.message);
+        setFollowUp({ user: raw, ai: result.message });
       } else if (result.success) {
-        succeed(describeChatResult(result));
+        succeed(describeSale(result));
       } else {
         fail("Le chatbot n'a pas compris. Reformule ?");
       }

@@ -8,6 +8,8 @@ interface TshirtsData {
   items: TShirtItem[];
 }
 
+export type { TshirtsData };
+
 export function useTshirts() {
   return useQuery({
     queryKey: ['tshirts'],
@@ -32,4 +34,17 @@ export function useAddTshirt() {
       tshirtsApi.add(body as unknown as Record<string, unknown>),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tshirts'] }),
   });
+}
+
+/** Reads the t-shirt sheet on demand (the chat needs it only when a maillot command is typed),
+ *  so pages hosting the chatbot don't pay an extra Sheets read on every mount. `fresh` skips
+ *  the cache — required before a write, since add/remove are computed from the current quantity. */
+export function useTshirtsLoader() {
+  const qc = useQueryClient();
+  return (fresh = false) =>
+    qc.fetchQuery({
+      queryKey: ['tshirts'],
+      queryFn: () => tshirtsApi.getAll() as Promise<TshirtsData>,
+      staleTime: fresh ? 0 : 60_000,
+    });
 }

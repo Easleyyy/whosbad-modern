@@ -2,10 +2,12 @@ import { useEffect, useRef } from 'react';
 import { useDictation, mmss } from '@/hooks/useDictation';
 
 const EXAMPLES = [
-  '2 Victor GM pour Lucas, payé CB',
+  '2 Victor GM pour Lucas MARTIN, payé CB',
+  "ajoute l'adhérent Emma DURAND",
+  'nouvelle référence Yonex AS50 à 25€',
+  'reçu 20 maillots Victor Bleu femme M',
   'la dernière vente de David est payée par virement',
   'reçu 20 boites de Victor PC',
-  'supprime la vente de Manon',
 ];
 
 interface Props {

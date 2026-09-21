@@ -4,10 +4,12 @@ import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/Toast';
 
 const EXAMPLES = [
-  '2 Victor GM pour Lucas, payé CB',
+  '2 Victor GM pour Lucas MARTIN, payé CB',
+  "ajoute l'adhérent Emma DURAND",
+  'nouvelle référence Yonex AS50 à 25€',
+  'reçu 20 maillots Victor Bleu femme M',
   'combien de CBX RED ?',
   'reçu 20 boites de Victor PC',
-  'prix de Victor GM',
 ];
 
 export function ChatHomePage() {
@@ -53,7 +55,7 @@ export function ChatHomePage() {
           <p className="font-mono text-[9px] font-medium tracking-label text-ink-45">WHO&apos;S BAD · LOGISTIQUE</p>
           <h1 className="mt-1 font-serif text-[40px] leading-none text-ink">Dictée</h1>
           <p className="mt-2 text-[12.5px] leading-relaxed text-ink-55">
-            Dicte ou écris une vente, un réassort, une question de stock — je m&apos;occupe du reste.
+            Dicte ou écris une vente (même à un nouvel adhérent), un réassort, une nouvelle référence, le stock de maillots — je m&apos;occupe du reste.
           </p>
         </div>
 

@@ -2,6 +2,15 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+
+# Shared adhérents list (Netlify Function + Blobs). Must stay ABOVE the SPA catch-all.
+[[redirects]]
+  from = "/api/adherents"
+  to = "/.netlify/functions/adherents"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

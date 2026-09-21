@@ -21,3 +21,15 @@
   to = "/index.html"
   status = 200
 ```
+
+## Liste des adhérents partagée (Netlify Function + Blobs)
+La liste des adhérents ajoutés via le chatbot est stockée côté serveur pour être identique
+sur mobile et desktop : `netlify/functions/adherents.mts` (route `/api/adherents`, cf. la
+règle de redirection dans `netlify.toml`, qui doit rester AVANT le `/*` de la SPA).
+
+- Aucune variable d'environnement : Netlify Blobs est activé automatiquement sur le site.
+- Les fonctions sont déployées avec le site (push sur GitHub → build Netlify).
+- `npm run dev` sert la même route depuis un fichier local `.dev-data/adherents.json`
+  (ignoré par git) : la liste de dev est donc distincte de la vraie liste.
+- Les adhérents déjà présents dans les ventes ou les groupes d'entraînement sont repris
+  automatiquement ; seuls les noms ajoutés à la main passent par cette liste.

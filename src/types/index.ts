@@ -102,3 +102,15 @@ export interface ReassortEntry {
   qty: number;
   commentaire?: string;
 }
+
+export interface ChatResponse {
+  success: boolean;
+  action: string;
+  message: string;
+  produit?: string;
+  achats?: number;
+  /** Sale rows written (vente) or the modification requested (modifier). */
+  data?: unknown;
+  /** Square payment links created, one per sale. */
+  squareLinks?: unknown;
+}

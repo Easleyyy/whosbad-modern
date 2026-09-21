@@ -132,7 +132,7 @@ export function TShirtsPage() {
         </p>
       </div>
 
-      <DictationBar onClick={() => setSheetOpen(true)} hint="« reçu 20 maillots femme M »" />
+      <DictationBar onClick={() => setSheetOpen(true)} hint="« reçu 20 maillots Victor Bleu femme M »" />
 
       <AnimatePresence>
         {edit && (

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ReassortEntry, ProductReference } from '@/types';
+import type { ReassortEntry, ProductReference, ChatResponse } from '@/types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'https://whosbad-backend.onrender.com';
 
@@ -72,7 +72,7 @@ export const salesApi = {
     api.delete<{ success: boolean }>('/api/delete', { data: { tab, rowIndex } }),
 
   chat: (message: string) =>
-    api.post<{ success: boolean; action: string; message: string; produit?: string; achats?: number; data?: unknown[] }>('/api/chat', { message }),
+    api.post<ChatResponse>('/api/chat', { message }),
 };
 
 // ── T-Shirts ──────────────────────────────────────────────────────

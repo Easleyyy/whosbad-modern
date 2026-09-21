@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/lib/api';
-import { withCatalogueContext } from '@/lib/aiContext';
+import { withChatContext, type ChatContext } from '@/lib/aiContext';
 import type { Sale, ProductReference } from '@/types';
 
 function mapRow(row: Record<string, unknown>, produit: string, idx: number, price: number): Sale {
@@ -114,8 +114,8 @@ export function useAIChat() {
   const qc = useQueryClient();
   const { data: references = [] as ProductReference[] } = useReferences();
   return useMutation({
-    mutationFn: (message: string) =>
-      salesApi.chat(withCatalogueContext(message, references)).then((r) => r.data),
+    mutationFn: ({ message, ...ctx }: { message: string } & Omit<ChatContext, 'refs'>) =>
+      salesApi.chat(withChatContext(message, { refs: references, ...ctx })).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['achats'] });
