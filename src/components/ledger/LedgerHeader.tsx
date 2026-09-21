@@ -2,6 +2,10 @@ interface Kpi {
   label: string;
   value: number | string;
   alert?: boolean;
+  /** When set the figure becomes a button (e.g. to filter the ledger below it). */
+  onClick?: () => void;
+  /** Whether this figure's filter is currently applied. */
+  active?: boolean;
 }
 
 interface Props {
@@ -49,14 +53,33 @@ export function LedgerHeader({ title, caption, kpis, folio, actions }: Props) {
 
         {kpis && (
           <div className="mt-3 flex gap-5">
-            {kpis.map((k, i) => (
-              <div key={k.label} className={i > 0 ? 'border-l border-ink-rule pl-5' : undefined}>
-                <div className="font-mono text-[9px] font-medium tracking-kpi text-ink-45">{k.label}</div>
-                <div className="stat-value font-serif text-[26px]" style={{ color: k.alert ? 'oklch(0.55 0.16 28)' : '#281E16' }}>
-                  {k.value}
+            {kpis.map((k, i) => {
+              const content = (
+                <>
+                  <div className="font-mono text-[9px] font-medium tracking-kpi text-ink-45">{k.label}</div>
+                  <div className="stat-value font-serif text-[26px]" style={{ color: k.alert ? 'oklch(0.55 0.16 28)' : '#281E16' }}>
+                    {k.value}
+                  </div>
+                </>
+              );
+              return (
+                <div key={k.label} className={i > 0 ? 'border-l border-ink-rule pl-5' : undefined}>
+                  {k.onClick ? (
+                    <button
+                      type="button"
+                      onClick={k.onClick}
+                      aria-pressed={k.active}
+                      aria-label={`${k.label} : ${k.value} — ${k.active ? 'retirer le filtre' : 'filtrer les mouvements'}`}
+                      className={`block border-b-2 text-left transition-opacity hover:opacity-60 ${k.active ? 'border-ink' : 'border-transparent'}`}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    content
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

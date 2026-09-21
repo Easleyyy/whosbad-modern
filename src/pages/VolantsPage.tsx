@@ -36,7 +36,7 @@ function stockState(qty: number) {
 }
 
 export function VolantsPage() {
-  const { activeTab, filters, datePreset, setActiveTab, setFilters, setDatePreset } = useSalesStore();
+  const { activeTab, filters, datePreset, movementKind, setActiveTab, setFilters, setDatePreset, setMovementKind, resetFilters } = useSalesStore();
   const { data: references = [] as ProductReference[] } = useReferences();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [refModalOpen, setRefModalOpen] = useState(false);
@@ -78,18 +78,47 @@ export function VolantsPage() {
     [references, achats, sales]
   );
 
+  // Each headline figure narrows the ledger to the rows that make it up:
+  // EN STOCK → restocks, VENDU → sales, IMPAYÉ → unpaid sales. Click again to clear.
+  // The totals are global, so a click also drops the model/search/date filters.
+  type KpiId = 'stock' | 'sold' | 'unpaid';
+
+  const unfiltered = !activeTab && !filters.search && datePreset === 'all';
+  const activeKpi: KpiId | null = !unfiltered
+    ? null
+    : movementKind === 'reassort' && (filters.status ?? 'all') === 'all'
+      ? 'stock'
+      : movementKind === 'vente' && filters.status === 'pending'
+        ? 'unpaid'
+        : movementKind === 'vente' && (filters.status ?? 'all') === 'all'
+          ? 'sold'
+          : null;
+
+  const movementsRef = useRef<HTMLElement>(null);
+
+  const toggleKpi = useCallback((id: KpiId) => {
+    const clearing = activeKpi === id;
+    resetFilters();
+    setActiveTab(null);
+    if (!clearing) {
+      setMovementKind(id === 'stock' ? 'reassort' : 'vente');
+      if (id === 'unpaid') setFilters({ status: 'pending' });
+    }
+    movementsRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeKpi, resetFilters, setActiveTab, setMovementKind, setFilters]);
+
   const kpis = useMemo(() => {
     const stock = models.reduce((n, m) => n + m.stock, 0);
     const sold = sales.reduce((n, s) => n + s.quantite, 0);
     const unpaid = sales.filter((s) => s.paye === 'Non').length;
     const cash = sales.filter((s) => s.paye === 'Oui').reduce((n, s) => n + (s.montant ?? 0), 0);
     return [
-      { label: 'EN STOCK', value: stock },
-      { label: 'VENDU', value: sold },
-      { label: 'IMPAYÉ', value: unpaid, alert: unpaid > 0 },
+      { label: 'EN STOCK', value: stock, onClick: () => toggleKpi('stock'), active: activeKpi === 'stock' },
+      { label: 'VENDU', value: sold, onClick: () => toggleKpi('sold'), active: activeKpi === 'sold' },
+      { label: 'IMPAYÉ', value: unpaid, alert: unpaid > 0, onClick: () => toggleKpi('unpaid'), active: activeKpi === 'unpaid' },
       { label: 'CAISSE', value: `${cash.toFixed(0)} €` },
     ];
-  }, [models, sales]);
+  }, [models, sales, activeKpi, toggleKpi]);
 
   // ── Mouvements ───────────────────────────────────────────────────────
   const modelSales = useMemo(
@@ -127,14 +156,14 @@ export function VolantsPage() {
 
   const movements = useMemo<Movement[]>(() => {
     const combined: Movement[] = [
-      ...filteredSales.map((sale): Movement => ({ kind: 'vente', date: sale.date, sale })),
-      ...filteredReassort.map((entry): Movement => ({ kind: 'reassort', date: entry.date, entry })),
+      ...(movementKind === 'reassort' ? [] : filteredSales.map((sale): Movement => ({ kind: 'vente', date: sale.date, sale }))),
+      ...(movementKind === 'vente' ? [] : filteredReassort.map((entry): Movement => ({ kind: 'reassort', date: entry.date, entry }))),
     ];
     return combined.sort((a, b) => {
       const diff = parseTs(a.date) - parseTs(b.date);
       return sortAsc ? diff : -diff;
     });
-  }, [filteredSales, filteredReassort, sortAsc]);
+  }, [filteredSales, filteredReassort, sortAsc, movementKind]);
 
   const counts = useMemo(() => ({
     all: modelSales.length,
@@ -185,9 +214,11 @@ export function VolantsPage() {
         </section>
 
         {/* Mouvements */}
-        <section className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5 lg:px-0 lg:pt-0">
+        <section ref={movementsRef} className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5 lg:px-0 lg:pt-0">
           <div className="mb-1.5 flex items-baseline justify-between">
-            <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">MOUVEMENTS</span>
+            <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">
+              {activeKpi === 'stock' ? 'MOUVEMENTS · ENTRÉES EN STOCK' : activeKpi === 'sold' ? 'MOUVEMENTS · VENTES' : activeKpi === 'unpaid' ? 'MOUVEMENTS · VENTES IMPAYÉES' : 'MOUVEMENTS'}
+            </span>
             <button
               onClick={() => setSortAsc((v) => !v)}
               className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
@@ -203,7 +234,11 @@ export function VolantsPage() {
             <DatePresetPills active={datePreset} onChange={setDatePreset} />
             <FilterPills
               active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
-              onChange={(s) => setFilters({ status: s })}
+              onChange={(s) => {
+                setFilters({ status: s });
+                // Restocks have no payment status — leaving them "only" would show nothing.
+                if (s !== 'all' && movementKind === 'reassort') setMovementKind('all');
+              }}
               counts={counts}
             />
           </div>
