@@ -5,6 +5,7 @@ const NAV = [
   { to: '/', label: 'Accueil' },
   { to: '/volants', label: 'Volants' },
   { to: '/tshirts', label: 'T-Shirts' },
+  { to: '/adherents', label: 'Adhérents' },
   { to: '/entrainements', label: 'Entraînements' },
   { to: '/pending', label: 'Impayés' },
   { to: '/settings', label: 'Réglages' },

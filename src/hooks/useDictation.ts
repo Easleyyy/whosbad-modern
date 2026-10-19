@@ -6,6 +6,7 @@ import { useTshirtsLoader, useUpdateTshirt, useAddTshirt } from '@/hooks/useTshi
 import { extractBuyers, memberKey, normalizeMemberName, parseAddMembers, parseRemoveMembers } from '@/lib/members';
 import { fillTshirtIntent, isTshirtMessage, parseTshirtIntent, planTshirt, type TshirtIntent } from '@/lib/tshirtCommands';
 import { foldAccents } from '@/lib/text';
+import { computeCoverage, formatCoverage } from '@/lib/stockCoverage';
 import { COLOR_OPTIONS, type ChatResponse, type ProductReference } from '@/types';
 
 // ─── Local parsers ──────────────────────────────────────────────────────────
@@ -506,7 +507,11 @@ export function useDictation({ onSuccess, onError, onDone, keepHistory, onSlow }
     const stockRef = parseStockQuery(raw, references);
     if (stockRef) {
       const inStock = netStock[stockRef.name] ?? 0;
-      succeed(`${stockRef.name} : ${inStock} boîte${inStock !== 1 ? 's' : ''} en stock`);
+      const cover = computeCoverage(allSales, stockRef.name, inStock);
+      const estimate = cover.status === 'rupture' ? ' — rupture'
+        : cover.days === null ? ' — aucune vente récente'
+        : ` — environ ${formatCoverage(cover).replace('≈ ', '')} au rythme actuel`;
+      succeed(`${stockRef.name} : ${inStock} boîte${inStock !== 1 ? 's' : ''} en stock${estimate}`);
       return;
     }
 

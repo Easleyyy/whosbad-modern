@@ -6,8 +6,8 @@ import { ToastContainer } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { NumberStepper } from '@/components/ui/NumberStepper';
 import { LedgerHeader } from '@/components/ledger/LedgerHeader';
-import { DictationBar } from '@/components/ai/DictationBar';
-import { DictationSheet } from '@/components/ai/DictationSheet';
+import { useElementWidth } from '@/hooks/useLayout';
+import { cn } from '@/lib/utils';
 
 const TAILLE_ORDER = ['XS', 'S', 'M', 'L', 'XL', '2XL', 'Junior'];
 const SEXE_ORDER = ['Homme', 'Femme', 'Junior', 'Mixte'];
@@ -51,7 +51,8 @@ export function TShirtsPage() {
   const { toasts, addToast, removeToast } = useToast();
   const [edit, setEdit] = useState<Cell | null>(null);
   const [addCtx, setAddCtx] = useState<string | null>(null);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [pageRef, pageWidth] = useElementWidth<HTMLDivElement>();
+  const wide = pageWidth >= 760; // two model columns only when the page really has the room (a docked chat narrows it)
 
   if (isLoading) return <div className="flex h-full items-center justify-center text-[12px] text-ink-45">Chargement…</div>;
   if (!data) return null;
@@ -60,13 +61,13 @@ export function TShirtsPage() {
   const total = items.reduce((n: number, i: { quantite: number }) => n + i.quantite, 0);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px]">
+    <div ref={pageRef} className="mx-auto flex h-full w-full max-w-[1040px] flex-col bg-paper">
       <LedgerHeader
         title="Registre des maillots"
         caption={`${total} pièces réparties sur ${marques.length} modèle${marques.length !== 1 ? 's' : ''}`}
       />
 
-      <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-12 lg:gap-y-2">
+      <div className={cn('flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5', wide && 'grid grid-cols-2 items-start gap-x-12 gap-y-2')}>
         {marques.map((marque) => {
           const mi = items.filter((i: { marque: string }) => i.marque === marque);
           const tailles = sortTailles([...new Set(mi.map((i: { taille: string }) => i.taille))]);
@@ -127,12 +128,10 @@ export function TShirtsPage() {
           );
         })}
 
-        <p className="border-t border-ink-rule pt-2.5 text-[11px] leading-[1.5] text-ink-55 lg:col-span-2">
+        <p className={cn('border-t border-ink-rule pt-2.5 text-[11px] leading-[1.5] text-ink-55', wide && 'col-span-2')}>
           Les zéros restent visibles : le registre montre les trous de stock au lieu de les cacher.
         </p>
       </div>
-
-      <DictationBar onClick={() => setSheetOpen(true)} hint="« reçu 20 maillots Victor Bleu femme M »" />
 
       <AnimatePresence>
         {edit && (
@@ -165,13 +164,6 @@ export function TShirtsPage() {
         )}
       </AnimatePresence>
 
-      <DictationSheet
-        isOpen={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onSuccess={(m) => addToast(m, 'success')}
-        onError={(m) => addToast(m, 'error')}
-        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
-      />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

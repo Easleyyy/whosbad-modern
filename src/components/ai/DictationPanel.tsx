@@ -14,12 +14,14 @@ interface Props {
   onSuccess: (msg: string) => void;
   onError: (msg: string) => void;
   onSlow?: () => void;
+  /** Hides the panel so the page can use the room (the dock remembers the choice). */
+  onCollapse?: () => void;
 }
 
 /** Persistent chat column docked beside the ledger on wide screens — unlike
  *  DictationSheet (a modal that covers the table), this stays visible at all
  *  times so the table and the AI conversation can be watched side by side. */
-export function DictationPanel({ onSuccess, onError, onSlow }: Props) {
+export function DictationPanel({ onSuccess, onError, onSlow, onCollapse }: Props) {
   const {
     turns, elapsed, isPending, displayValue, setText,
     isListening, isSupported, start, stop, handleSend, references,
@@ -31,9 +33,16 @@ export function DictationPanel({ onSuccess, onError, onSlow }: Props) {
   }, [turns]);
 
   return (
-    <aside className="hidden xl:flex xl:w-[340px] xl:flex-shrink-0 xl:flex-col xl:border-l-[1.5px] xl:border-ink-rule xl:py-3 xl:pl-7">
+    <aside aria-label="Assistant" className="flex h-full min-h-0 w-full flex-col border-l-[1.5px] border-ink-rule px-5 py-3">
       <div className="flex-none pb-3">
-        <p className="font-mono text-[9px] font-medium tracking-label text-ink-45">IA · DICTÉE</p>
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] font-medium tracking-label text-ink-55">IA · DICTÉE</p>
+          {onCollapse && (
+            <button onClick={onCollapse} aria-label="Masquer l'assistant" className="-mr-2 min-h-[36px] px-2 font-mono text-[10px] font-medium tracking-label text-ink-55 hover:text-ink">
+              MASQUER ›
+            </button>
+          )}
+        </div>
         {references.length > 0 && (
           <p className="mt-1.5 text-[10px] leading-relaxed text-ink-45">
             {references.map((r) => `${r.name} · ${r.price} €`).join('  —  ')}

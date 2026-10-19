@@ -1,6 +1,10 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { useAllSalesData, useAchats, useDeleteSale, useUpdateSale, useReferences, useAllReassortLog } from '@/hooks/useSales';
-import { EditSaleModal } from '@/components/sales/EditSaleModal';
+import { useAllReassortLog } from '@/hooks/useSales';
+import { useInventory } from '@/hooks/useInventory';
+import { useSaleDeletion } from '@/hooks/useSaleDeletion';
+import { useElementWidth } from '@/hooks/useLayout';
+import { useSaleEditor } from '@/stores/saleEditorStore';
+import { COVERAGE_WORD, formatCoverage, type CoverageStatus } from '@/lib/stockCoverage';
 import { useSalesStore } from '@/stores/salesStore';
 import { useToast } from '@/hooks/useToast';
 import { SaleCard } from '@/components/sales/SaleCard';
@@ -10,14 +14,11 @@ import { SearchBar } from '@/components/sales/SearchBar';
 import { FilterPills } from '@/components/sales/FilterPills';
 import { DatePresetPills } from '@/components/sales/DatePresetPills';
 import { LedgerHeader } from '@/components/ledger/LedgerHeader';
-import { DictationBar } from '@/components/ai/DictationBar';
-import { DictationSheet } from '@/components/ai/DictationSheet';
-import { DictationPanel } from '@/components/ai/DictationPanel';
 import { ReferenceModal } from '@/components/volants/ReferenceModal';
 import { StockModal } from '@/components/volants/StockModal';
 import { ToastContainer } from '@/components/ui/Toast';
-import { filterSales, getDateRange } from '@/lib/utils';
-import type { Sale, ProductReference, ReassortEntry } from '@/types';
+import { cn, filterSales, getDateRange } from '@/lib/utils';
+import type { Sale, ReassortEntry } from '@/types';
 
 function parseTs(dateStr: string) {
   if (!dateStr) return 0;
@@ -29,54 +30,36 @@ type Movement =
   | { kind: 'vente'; date: string; sale: Sale }
   | { kind: 'reassort'; date: string; entry: ReassortEntry };
 
-function stockState(qty: number) {
-  if (qty === 0) return { word: 'rupture', color: 'rgba(40,30,22,.4)' };
-  if (qty <= 8) return { word: 'à commander', color: 'oklch(0.55 0.16 28)' };
-  return { word: 'ok', color: 'rgba(40,30,22,.45)' };
-}
+const COVERAGE_COLOR: Record<CoverageStatus, string> = {
+  rupture: 'oklch(0.55 0.16 28)',
+  proche: 'oklch(0.55 0.16 28)',
+  prevoir: 'oklch(0.5 0.12 72)',
+  ok: 'rgba(40,30,22,.6)',
+  dormant: 'rgba(40,30,22,.6)',
+};
+
+/** Below this much room the registre is a single column (inventory above the movements). */
+const TWO_COLUMNS_FROM = 720;
 
 export function VolantsPage() {
   const { activeTab, filters, datePreset, movementKind, setActiveTab, setFilters, setDatePreset, setMovementKind, resetFilters } = useSalesStore();
-  const { data: references = [] as ProductReference[] } = useReferences();
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [refModalOpen, setRefModalOpen] = useState(false);
   const [stockModalOpen, setStockModalOpen] = useState(false);
   const [sortAsc, setSortAsc] = useState(false);
-  const [editSale, setEditSale] = useState<Sale | null>(null);
-  const { data: sales = [], isLoading } = useAllSalesData();
-  const { data: achats = {} } = useAchats();
+  const { items: models, sales, isLoading } = useInventory();
   const { data: reassortEntries = [] } = useAllReassortLog();
-  const { mutate: deleteSale } = useDeleteSale();
-  const { mutateAsync: updateSale, isPending: updating } = useUpdateSale();
-  const { toasts, addToast, addUndoToast, removeToast } = useToast();
+  const { toasts, addToast, removeToast } = useToast();
+  const { openEditor, openNew } = useSaleEditor();
+  const requestDelete = useSaleDeletion();
+  const [pageRef, pageWidth] = useElementWidth<HTMLDivElement>();
+  const wide = pageWidth >= TWO_COLUMNS_FROM;
 
-  const undoTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-
-  const handleDelete = useCallback((sale: Sale) => {
-    if (!sale._row || !sale.produit) return;
-    const tab = sale.produit;
-    const rowIndex = sale._row;
-    const toastId = `undo-${sale.id}`;
-    addUndoToast(`${sale.acheteur} supprimé`, () => {
-      const t = undoTimers.current.get(toastId);
-      if (t) { clearTimeout(t); undoTimers.current.delete(toastId); }
-    });
-    const timer = setTimeout(() => {
-      deleteSale({ rowIndex, tab });
-      undoTimers.current.delete(toastId);
-    }, 5000);
-    undoTimers.current.set(toastId, timer);
-  }, [deleteSale, addUndoToast]);
-
-  // ── Inventaire par modèle ──────────────────────────────────────────────
-  const models = useMemo(
-    () => references.map((ref) => {
-      const bought = achats[ref.name] ?? 0;
-      const sold = sales.filter((s) => s.produit === ref.name).reduce((n, s) => n + s.quantite, 0);
-      return { name: ref.name, stock: Math.max(0, bought - sold) };
-    }),
-    [references, achats, sales]
-  );
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const needsAttention = (m: (typeof models)[number]) => ['rupture', 'proche', 'prevoir'].includes(m.coverage.status);
+  const watch = models.filter(needsAttention).length;
+  // On a narrow page the full inventory would push the movements off-screen: show only what needs
+  // attention (plus the model being filtered on) until the person asks for everything.
+  const visibleModels = wide || inventoryOpen ? models : models.filter((m) => needsAttention(m) || m.name === activeTab);
 
   // Each headline figure narrows the ledger to the rows that make it up:
   // EN STOCK → restocks, VENDU → sales, IMPAYÉ → unpaid sales. Click again to clear.
@@ -173,137 +156,121 @@ export function VolantsPage() {
   }), [modelSales]);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col bg-paper lg:max-w-[1040px] xl:max-w-[1440px]">
+    <div ref={pageRef} className="mx-auto flex h-full w-full max-w-[1440px] flex-col bg-paper">
       <LedgerHeader
         title="Registre des volants"
         kpis={kpis}
         folio={sales.length ? `N° ${sales.length}` : undefined}
         actions={[
+          { label: '+ VENTE', onClick: () => openNew({ produit: activeTab ?? undefined }) },
           { label: 'RÉASSORT', onClick: () => setStockModalOpen(true) },
           { label: 'RÉFÉRENCES', onClick: () => setRefModalOpen(true) },
         ]}
       />
 
-      <div className="flex flex-1 overflow-hidden lg:px-[22px]">
-      <div className="flex flex-1 flex-col overflow-hidden lg:min-w-0 lg:flex-row lg:gap-10 lg:pt-3">
-        {/* Inventaire par modèle */}
-        <section className="flex-none px-[22px] pt-3 pb-1.5 lg:w-[260px] lg:flex-shrink-0 lg:overflow-y-auto lg:border-r-[1.5px] lg:border-ink-rule lg:px-0 lg:pb-0 lg:pr-8 lg:pt-0">
-          <div className="mb-1.5 font-mono text-[9px] font-medium tracking-label text-ink-45">
-            INVENTAIRE PAR MODÈLE
-          </div>
-          {models.map((m) => {
-            const state = stockState(m.stock);
-            const on = activeTab === m.name;
-            return (
-              <button
-                key={m.name}
-                onClick={() => setActiveTab(on ? null : m.name)}
-                aria-label={`${m.name}, ${m.stock} boîtes en stock`}
-                aria-pressed={on}
-                className={`flex w-full items-baseline gap-2 py-[5px] text-left ${on ? 'border-b border-ink bg-ink/[.05]' : 'border-b border-dotted border-ink-dot'}`}
-              >
-                <span className="text-[12px] font-medium text-ink">{m.name}</span>
-                <span className="flex-1" />
-                <span className="font-mono text-[10px] font-medium" style={{ color: state.color }}>
-                  {state.word}
-                </span>
-                <span className="w-[34px] text-right font-mono text-[13px] font-semibold text-ink">{m.stock}</span>
-              </button>
-            );
-          })}
-        </section>
-
-        {/* Mouvements */}
-        <section ref={movementsRef} className="flex-1 overflow-y-auto no-scrollbar px-[22px] pt-2.5 lg:px-0 lg:pt-0">
-          <div className="mb-1.5 flex items-baseline justify-between">
-            <span className="font-mono text-[9px] font-medium tracking-label text-ink-45">
-              {activeKpi === 'stock' ? 'MOUVEMENTS · ENTRÉES EN STOCK' : activeKpi === 'sold' ? 'MOUVEMENTS · VENTES' : activeKpi === 'unpaid' ? 'MOUVEMENTS · VENTES IMPAYÉES' : 'MOUVEMENTS'}
-            </span>
-            <button
-              onClick={() => setSortAsc((v) => !v)}
-              className="font-mono text-[9px] font-medium tracking-label text-ink-45 hover:text-ink"
-            >
-              {sortAsc ? 'ANCIEN' : 'RÉCENT'}
-            </button>
-          </div>
-
-          <div className="space-y-2 pb-2 lg:flex lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-2 lg:space-y-0">
-            <div className="lg:w-[220px] lg:flex-shrink-0">
-              <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
+      <div className={cn('flex min-h-0 flex-1 overflow-hidden', wide && 'px-[22px]')}>
+        <div className={cn('flex min-h-0 min-w-0 flex-1 overflow-hidden', wide ? 'flex-row gap-10 pt-3' : 'flex-col')}>
+          {/* Inventaire par modèle, avec le nombre de jours de stock estimés */}
+          <section
+            aria-label="Inventaire par modèle"
+            className={cn(
+              'flex-none',
+              wide ? 'w-[300px] overflow-y-auto border-r-[1.5px] border-ink-rule pr-8' : 'px-[22px] pt-3 pb-1.5'
+            )}
+          >
+            <div className="mb-1 flex items-baseline justify-between">
+              <span className="font-mono text-[10px] font-medium tracking-label text-ink-55">INVENTAIRE PAR MODÈLE</span>
+              {watch > 0 && <span className="font-mono text-[10px] font-semibold text-alert">{watch} À SURVEILLER</span>}
             </div>
-            <DatePresetPills active={datePreset} onChange={setDatePreset} />
-            <FilterPills
-              active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
-              onChange={(s) => {
-                setFilters({ status: s });
-                // Restocks have no payment status — leaving them "only" would show nothing.
-                if (s !== 'all' && movementKind === 'reassort') setMovementKind('all');
-              }}
-              counts={counts}
-            />
-          </div>
+            {(wide || inventoryOpen) && (
+              <p className="mb-1.5 text-[10.5px] leading-snug text-ink-55">
+                Jours de stock estimés d’après les ventes des 60 derniers jours.
+              </p>
+            )}
+            {visibleModels.map((m) => {
+              const on = activeTab === m.name;
+              const c = m.coverage;
+              return (
+                <button
+                  key={m.name}
+                  onClick={() => setActiveTab(on ? null : m.name)}
+                  aria-label={`${m.name}, ${m.stock} boîtes en stock, ${formatCoverage(c)}`}
+                  aria-pressed={on}
+                  className={cn('flex min-h-[40px] w-full items-baseline gap-2 py-[7px] text-left', on ? 'border-b border-ink bg-ink/[.05]' : 'border-b border-dotted border-ink-dot')}
+                >
+                  <span className="text-[12.5px] font-medium text-ink">{m.name}</span>
+                  <span className="flex-1" />
+                  <span className="font-mono text-[10.5px] font-medium" style={{ color: COVERAGE_COLOR[c.status] }}>
+                    {COVERAGE_WORD[c.status]}
+                  </span>
+                  <span className="w-[52px] text-right font-mono text-[10.5px] text-ink-55">
+                    {c.days === null || c.status === 'rupture' ? '' : formatCoverage(c)}
+                  </span>
+                  <span className="w-[34px] text-right font-mono text-[13px] font-semibold text-ink">{m.stock}</span>
+                </button>
+              );
+            })}
+            {!wide && (
+              <button onClick={() => setInventoryOpen((v) => !v)} aria-expanded={inventoryOpen} className="min-h-[44px] font-mono text-[10.5px] font-medium tracking-label text-ink-55 hover:text-ink">
+                {inventoryOpen ? 'RÉDUIRE L’INVENTAIRE ▴' : `TOUT L’INVENTAIRE (${models.length}) ▾`}
+              </button>
+            )}
+          </section>
 
-          {isLoading ? (
-            Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
-          ) : movements.length === 0 ? (
-            <p className="py-10 text-center text-[12px] text-ink-45">
-              {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
-            </p>
-          ) : (
-            movements.map((m, i) =>
-              m.kind === 'vente' ? (
-                <SaleCard key={m.sale.id} sale={m.sale} index={i} onEdit={setEditSale} onDelete={handleDelete} />
-              ) : (
-                <ReassortCard
-                  key={`reassort-${m.entry.produit}-${m.entry._row}`}
-                  entry={m.entry}
-                  index={i}
-                  onSuccess={(msg) => addToast(msg, 'success')}
-                  onError={(msg) => addToast(msg, 'error')}
-                />
+          {/* Mouvements */}
+          <section ref={movementsRef} aria-label="Mouvements" className={cn('min-w-0 flex-1 overflow-y-auto no-scrollbar', wide ? '' : 'px-[22px] pt-2.5')}>
+            <div className="mb-1.5 flex items-baseline justify-between">
+              <span className="font-mono text-[10px] font-medium tracking-label text-ink-55">
+                {activeKpi === 'stock' ? 'MOUVEMENTS · ENTRÉES EN STOCK' : activeKpi === 'sold' ? 'MOUVEMENTS · VENTES' : activeKpi === 'unpaid' ? 'MOUVEMENTS · VENTES IMPAYÉES' : 'MOUVEMENTS'}
+              </span>
+              <button
+                onClick={() => setSortAsc((v) => !v)}
+                className="min-h-[32px] font-mono text-[10px] font-medium tracking-label text-ink-55 hover:text-ink"
+              >
+                {sortAsc ? 'ANCIEN' : 'RÉCENT'}
+              </button>
+            </div>
+
+            <div className={cn('pb-2', wide ? 'flex flex-wrap items-center gap-x-6 gap-y-2' : 'space-y-2')}>
+              <div className={cn(wide && 'w-[220px] flex-shrink-0')}>
+                <SearchBar value={filters.search ?? ''} onChange={(v) => setFilters({ search: v })} />
+              </div>
+              <DatePresetPills active={datePreset} onChange={setDatePreset} />
+              <FilterPills
+                active={(filters.status ?? 'all') as 'all' | 'paid' | 'pending' | 'dash'}
+                onChange={(st) => {
+                  setFilters({ status: st });
+                  // Restocks have no payment status — leaving them "only" would show nothing.
+                  if (st !== 'all' && movementKind === 'reassort') setMovementKind('all');
+                }}
+                counts={counts}
+              />
+            </div>
+
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => <SaleCardSkeleton key={i} />)
+            ) : movements.length === 0 ? (
+              <p className="py-10 text-center text-[12px] text-ink-55">
+                {filters.search || filters.status !== 'all' ? 'Aucun résultat' : 'Aucun mouvement'}
+              </p>
+            ) : (
+              movements.map((m, i) =>
+                m.kind === 'vente' ? (
+                  <SaleCard key={m.sale.id} sale={m.sale} index={i} onEdit={openEditor} onDelete={requestDelete} />
+                ) : (
+                  <ReassortCard
+                    key={`reassort-${m.entry.produit}-${m.entry._row}`}
+                    entry={m.entry}
+                    index={i}
+                    onSuccess={(msg) => addToast(msg, 'success')}
+                    onError={(msg) => addToast(msg, 'error')}
+                  />
+                )
               )
-            )
-          )}
-        </section>
+            )}
+          </section>
+        </div>
       </div>
-
-      <DictationPanel
-        onSuccess={(msg) => addToast(msg, 'success')}
-        onError={(msg) => addToast(msg, 'error')}
-        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
-      />
-      </div>
-
-      <div className="xl:hidden">
-        <DictationBar onClick={() => setSheetOpen(true)} />
-      </div>
-
-      {editSale && (
-        <EditSaleModal
-          sale={editSale}
-          loading={updating}
-          onClose={() => setEditSale(null)}
-          onSave={async (body) => {
-            try {
-              await updateSale(body as Record<string, unknown>);
-              addToast(`Mis à jour · ${editSale.acheteur}`, 'success');
-              setEditSale(null);
-            } catch { addToast('Erreur lors de la mise à jour', 'error'); }
-          }}
-          onDelete={(sale) => {
-            handleDelete(sale);
-            setEditSale(null);
-          }}
-        />
-      )}
-
-      <DictationSheet
-        isOpen={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-        onSuccess={(msg) => addToast(msg, 'success')}
-        onError={(msg) => addToast(msg, 'error')}
-        onSlow={() => addToast('Réveil du serveur… patiente quelques secondes', 'info')}
-      />
 
       <ReferenceModal isOpen={refModalOpen} onClose={() => setRefModalOpen(false)} />
 

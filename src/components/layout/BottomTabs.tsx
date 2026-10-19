@@ -5,7 +5,7 @@ const TABS = [
   { to: '/', label: 'Accueil' },
   { to: '/volants', label: 'Volants' },
   { to: '/tshirts', label: 'T-Shirts' },
-  { to: '/entrainements', label: 'Entraîn.' },
+  { to: '/adherents', label: 'Adhérents' },
   { to: '/pending', label: 'Impayés' },
 ] as const;
 

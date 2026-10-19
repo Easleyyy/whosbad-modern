@@ -16,6 +16,11 @@ cp .env.example .env   # renseigne DATABASE_URL (Neon), API_SECRET, VITE_API_SEC
 npm run dev             # netlify dev : frontend + fonctions ensemble
 ```
 
+## Tests
+```bash
+npm test   # logique pure + routes API contre un vrai Postgres en mémoire (pglite), sans toucher à Neon
+```
+
 ## Build
 ```bash
 npm run build

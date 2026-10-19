@@ -60,7 +60,7 @@ export const salesApi = {
     api.post<{ success: boolean; produit: string; error?: string }>('/api/references/delete', { name }).then((r) => r.data),
 
   add: (body: Record<string, unknown>) =>
-    api.post<{ success: boolean }>('/api/add', body),
+    api.post<{ success: boolean; row?: number }>('/api/add', body),
 
   update: (body: Record<string, unknown>) =>
     api.post<{ success: boolean }>('/api/update', body),

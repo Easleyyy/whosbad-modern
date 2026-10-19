@@ -11,3 +11,7 @@ deno.lock
 
 # Local Claude Code permission overrides
 .claude/settings.local.json
+
+# temp test bundles
+*.tmp.mjs
+.test-build/

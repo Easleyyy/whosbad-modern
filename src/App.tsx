@@ -3,6 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { BottomTabs } from '@/components/layout/BottomTabs';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { ChatBar, ChatSide } from '@/components/ai/ChatDock';
+import { SaleEditorHost } from '@/components/sales/SaleEditorHost';
+import { AdherentsPage } from '@/pages/AdherentsPage';
 import { ChatHomePage } from '@/pages/ChatHomePage';
 import { VolantsPage } from '@/pages/VolantsPage';
 import { TShirtsPage, EntrainementsPage, SettingsPage, PendingPage } from '@/pages/OtherPages';
@@ -64,19 +67,23 @@ export default function App() {
         <div className="flex overflow-hidden bg-paper" style={{ height: '100dvh' }}>
           <UpdateBanner />
           <Sidebar />
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <main className="flex-1 overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+            <main className="min-h-0 flex-1 overflow-hidden">
               <Routes>
                 <Route path="/" element={<ChatHomePage />} />
                 <Route path="/volants" element={<VolantsPage />} />
                 <Route path="/tshirts" element={<TShirtsPage />} />
+                <Route path="/adherents" element={<AdherentsPage />} />
                 <Route path="/entrainements" element={<EntrainementsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/pending" element={<PendingPage />} />
               </Routes>
             </main>
+            <ChatBar />
             <BottomTabs />
           </div>
+          <ChatSide />
+          <SaleEditorHost />
           <NotificationManager />
         </div>
       </BrowserRouter>

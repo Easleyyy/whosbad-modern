@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/lib/api';
 import { withChatContext, type ChatContext } from '@/lib/aiContext';
 import type { Sale, ProductReference } from '@/types';
@@ -102,10 +102,83 @@ export function useDeleteSale() {
   });
 }
 
+/** Fields a sale edit can change (same names as the API body). */
+export interface SaleUpdate {
+  rowIndex: number;
+  tab: string;
+  date?: string;
+  new_acheteur?: string;
+  vendeur?: string;
+  quantite?: number;
+  paye?: Sale['paye'];
+  mode_paiement?: string;
+  commentaire?: string;
+}
+
+/** Applies an edit to every cached copy of the sales list, so the ledger moves the instant a
+ *  field changes instead of after the server round-trip (and a rollback snapshot is returned). */
+function patchSalesCache(qc: QueryClient, v: SaleUpdate) {
+  const prices = new Map((qc.getQueryData<ProductReference[]>(['references']) ?? []).map((r) => [r.name, r.price]));
+  const snapshots = qc.getQueriesData<Sale[]>({ queryKey: ['sales', 'all'] });
+  qc.setQueriesData<Sale[]>({ queryKey: ['sales', 'all'] }, (old) =>
+    old?.map((s) => {
+      if (s._row !== v.rowIndex || s.produit !== v.tab) return s;
+      const quantite = v.quantite ?? s.quantite;
+      return {
+        ...s,
+        ...(v.date !== undefined && { date: v.date }),
+        ...(v.new_acheteur !== undefined && { acheteur: v.new_acheteur }),
+        ...(v.vendeur !== undefined && { vendeur: v.vendeur }),
+        ...(v.paye !== undefined && { paye: v.paye }),
+        ...(v.mode_paiement !== undefined && { mode_paiement: v.mode_paiement as Sale['mode_paiement'] }),
+        ...(v.commentaire !== undefined && { commentaire: v.commentaire }),
+        quantite,
+        montant: quantite * (prices.get(v.tab) ?? (s.quantite ? (s.montant ?? 0) / s.quantite : 0)),
+      };
+    })
+  );
+  return snapshots;
+}
+
 export function useUpdateSale() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Record<string, unknown>) => salesApi.update(body),
+    mutationKey: ['sale-update'],
+    mutationFn: (v: SaleUpdate) => salesApi.update(v as unknown as Record<string, unknown>),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: ['sales'] });
+      return { snapshots: patchSalesCache(qc, v) };
+    },
+    onError: (_e, _v, ctx) => ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data)),
+    // Several quick edits in a row: only refetch once the last one has settled, otherwise a
+    // refetch carrying a half-applied state would flicker over the optimistic one.
+    onSettled: () => {
+      if (qc.isMutating({ mutationKey: ['sale-update'] }) <= 1) qc.invalidateQueries({ queryKey: ['sales'] });
+    },
+  });
+}
+
+export interface NewSale {
+  tab: string;
+  acheteur: string;
+  quantite?: number;
+  paye?: Sale['paye'];
+  mode_paiement?: string;
+  vendeur?: string;
+  commentaire?: string;
+  date?: string;
+}
+
+/** Creates a sale and returns its id, so the editor can carry on with the row just created. */
+export function useAddSale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: NewSale) => {
+      const res = await salesApi.add(body as unknown as Record<string, unknown>);
+      const row = (res.data as { row?: number }).row;
+      if (!res.data.success || !row) throw new Error('La vente n\'a pas pu être créée');
+      return row;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sales'] }),
   });
 }

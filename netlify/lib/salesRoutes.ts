@@ -53,12 +53,15 @@ export async function handleSales(req: Request, db: Db, sub: string): Promise<Re
     const tab = String(body.tab ?? '');
     const known = await db.query('select 1 from product_references where name = $1', [tab]);
     if (!known.length) return fail('Onglet invalide');
-    await db.query(
+    const quantite = Math.max(1, Math.floor(Number(body.quantite ?? 1)) || 1);
+    // `date` optional (DD/MM/YYYY or ISO) — defaults to today, as before. The new row's id comes
+    // back so the app can keep editing the sale it just created.
+    const created = await db.query<{ id: number }>(
       `insert into sales (produit, date, vendeur, acheteur, quantite, paye, mode_paiement, commentaire)
-       values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [tab, todayISO(), String(body.vendeur ?? ''), String(body.acheteur ?? ''), Number(body.quantite ?? 1), String(body.paye ?? 'Non'), String(body.mode_paiement ?? ''), String(body.commentaire ?? '')]
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      [tab, body.date ? toISODate(body.date) : todayISO(), String(body.vendeur ?? ''), String(body.acheteur ?? ''), quantite, String(body.paye ?? 'Non'), String(body.mode_paiement ?? ''), String(body.commentaire ?? '')]
     );
-    return ok({});
+    return ok({ row: created[0].id });
   }
 
   if (sub === 'update') {

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDictation, mmss } from '@/hooks/useDictation';
 import { useModalGestures } from '@/hooks/useModalGestures';
+import { useKeyboardInset } from '@/hooks/useLayout';
 
 interface Props {
   isOpen: boolean;
@@ -12,6 +13,7 @@ interface Props {
 
 export function DictationSheet({ isOpen, onClose, onSuccess, onError, onSlow }: Props) {
   const { y, bind } = useModalGestures(isOpen, onClose);
+  const keyboard = useKeyboardInset(isOpen);
   const {
     turns, elapsed, isPending, displayValue, setText,
     isListening, isSupported, start, stop, handleSend, references,
@@ -30,8 +32,8 @@ export function DictationSheet({ isOpen, onClose, onSuccess, onError, onSlow }: 
           <motion.div
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            style={{ y }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80%] max-w-[480px] lg:max-w-[560px] flex-col gap-2.5 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
+            style={{ y, bottom: keyboard }}
+            className="fixed inset-x-0 z-50 mx-auto flex max-h-[85dvh] max-w-[560px] flex-col gap-2.5 border-t-2 border-ink bg-paper px-5 pt-4 pb-safe"
           >
             <div {...bind()} className="flex touch-none items-baseline justify-between">
               <span className="font-serif text-[22px] text-ink">Dictée</span>
