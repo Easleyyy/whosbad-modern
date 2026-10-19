@@ -2,13 +2,21 @@
   command = "npm run build"
   publish = "dist"
 
+# VITE_API_SECRET is shipped inside the public JS bundle on purpose (see src/lib/apiSecret.ts —
+# it's a speed bump against bots, not a real secret), and API_SECRET holds the same value, so
+# Netlify's secret scanner would otherwise fail every build when it finds it in dist/.
+[build.environment]
+  NODE_VERSION = "22"
+  SECRETS_SCAN_OMIT_KEYS = "VITE_API_SECRET,API_SECRET"
+
 [functions]
   directory = "netlify/functions"
 
-# Shared adhérents list (Netlify Function + Blobs). Must stay ABOVE the SPA catch-all.
+# Every /api/* route is one Netlify Function (netlify/functions/api.mts) that dispatches
+# internally by path — see that file. Must stay ABOVE the SPA catch-all.
 [[redirects]]
-  from = "/api/adherents"
-  to = "/.netlify/functions/adherents"
+  from = "/api/*"
+  to = "/.netlify/functions/api"
   status = 200
 
 [[redirects]]

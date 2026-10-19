@@ -1,15 +1,12 @@
 import axios from 'axios';
 import type { ReassortEntry, ProductReference, ChatResponse } from '@/types';
+import { AUTH_HEADERS } from '@/lib/apiSecret';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'https://whosbad-backend.onrender.com';
-
-// Le backend gratuit (Render) s'endort après 15 min d'inactivité — un premier
-// appel peut prendre 30 à 50s le temps qu'il se réveille. Un timeout court ferait
-// échouer une vente/ajout qui aurait fini par passer. 60s laisse la marge.
+// Même origine que le frontend depuis la migration vers Netlify Functions + Postgres — plus
+// de Render, plus de réveil à froid, donc plus besoin d'un timeout long pour l'absorber.
 export const api = axios.create({
-  baseURL: API_URL,
-  timeout: 60000,
-  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS },
 });
 
 // Intercepteur pour logs en dev
@@ -80,14 +77,4 @@ export const tshirtsApi = {
   getAll: () => api.get('/api/tshirts').then((r) => r.data),
   update: (body: Record<string, unknown>) => api.post('/api/tshirts/update', body),
   add: (body: Record<string, unknown>) => api.post('/api/tshirts/add', body),
-};
-
-// ── Entraînements ─────────────────────────────────────────────────
-export const entrainementsApi = {
-  getAll: () => api.get('/api/entrainements').then((r) => r.data),
-  addPlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/add', body),
-  updatePlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/update', body),
-  deletePlayer: (body: Record<string, unknown>) => api.post('/api/entrainements/delete', body),
-  setPaiement: (body: { groupe: string; nom: string; statut: string }) =>
-    api.post('/api/entrainements/paiement', body),
 };

@@ -1,23 +1,19 @@
-# Who's Bad Logistic — Frontend React
+# Who's Bad Logistic
 
-Frontend React 18 + TypeScript + Vite pour la gestion des volants de badminton.
+Gestion des volants, t-shirts, entraînements et ventes de badminton — frontend React + backend
+Netlify Functions + Postgres (Neon), un seul dépôt.
 
 ## Stack
-- React 18 + TypeScript + Vite
-- TailwindCSS + Framer Motion
-- Zustand + React Query
-- PWA (vite-plugin-pwa)
+- Frontend : React 18 + TypeScript + Vite, TailwindCSS + Framer Motion, Zustand + React Query, PWA
+- Backend : Netlify Functions (`netlify/functions/api.mts`, une seule fonction qui distribue
+  toutes les routes `/api/*` — voir `netlify/lib/`), Postgres (Neon)
+- Intégrations : Anthropic (chatbot de saisie en langage naturel), Square (paiements)
 
 ## Démarrage
 ```bash
 npm install
-cp .env.example .env
-npm run dev
-```
-
-## Variables d'environnement
-```
-VITE_API_URL=https://whosbad-backend.onrender.com
+cp .env.example .env   # renseigne DATABASE_URL (Neon), API_SECRET, VITE_API_SECRET
+npm run dev             # netlify dev : frontend + fonctions ensemble
 ```
 
 ## Build
@@ -25,5 +21,5 @@ VITE_API_URL=https://whosbad-backend.onrender.com
 npm run build
 ```
 
-## Déploiement Netlify
-Voir DEPLOYMENT.md
+## Déploiement, schéma de base et migration
+Voir [DEPLOYMENT.md](DEPLOYMENT.md).

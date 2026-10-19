@@ -1,13 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEntrainements, useAddPlayer, useDeletePlayer, useSetPaiement, getPayStatus, cyclePayStatus } from '@/hooks/useEntrainements';
+import { useEntrainements, useAddPlayer, useDeletePlayer, useSetPaiement, nextPayStatus } from '@/hooks/useEntrainements';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { LedgerHeader } from '@/components/ledger/LedgerHeader';
 import { cn } from '@/lib/utils';
-
-type PayStatus = 'pending' | 'paid' | 'unpaid';
+import type { PayStatus } from '@/types';
 
 const PAY_LABEL: Record<PayStatus, string> = { paid: 'payé', pending: 'en attente', unpaid: 'non payé' };
 const PAY_COLOR: Record<PayStatus, string> = {
@@ -60,21 +59,16 @@ function AddPlayerSheet({ groupe, onSave, onClose, loading }: AddPlayerSheetProp
 
 interface PlayerRowProps {
   groupe: string;
+  id: string;
   nom: string;
   commentaire?: string;
-  serverPaiement?: PayStatus;
+  paiement: PayStatus;
+  onError: (msg: string) => void;
   onDelete: () => void;
 }
 
-function PlayerRow({ groupe, nom, commentaire, serverPaiement, onDelete }: PlayerRowProps) {
-  const [status, setStatus] = useState<PayStatus>(() => getPayStatus(groupe, nom, serverPaiement));
+function PlayerRow({ groupe, id, nom, commentaire, paiement, onError, onDelete }: PlayerRowProps) {
   const { mutate: setPaiement } = useSetPaiement();
-
-  const handleCycle = useCallback(() => {
-    const next = cyclePayStatus(groupe, nom, status);
-    setStatus(next);
-    setPaiement({ groupe, nom, statut: next });
-  }, [groupe, nom, status, setPaiement]);
 
   return (
     <div className="flex items-baseline gap-2.5 border-b border-dotted border-ink-dot py-2">
@@ -83,11 +77,11 @@ function PlayerRow({ groupe, nom, commentaire, serverPaiement, onDelete }: Playe
         {commentaire && <p className="truncate text-[10px] text-ink-55">{commentaire}</p>}
       </div>
       <button
-        onClick={handleCycle}
+        onClick={() => setPaiement({ groupe, id, statut: nextPayStatus(paiement) }, { onError: (e) => onError(e.message) })}
         className="flex-shrink-0 border-b-[1.5px] font-mono text-[9px] font-semibold uppercase"
-        style={{ color: PAY_COLOR[status], borderColor: PAY_COLOR[status] }}
+        style={{ color: PAY_COLOR[paiement], borderColor: PAY_COLOR[paiement] }}
       >
-        {PAY_LABEL[status]}
+        {PAY_LABEL[paiement]}
       </button>
       <button
         onClick={() => { if (confirm(`Supprimer ${nom} ?`)) onDelete(); }}
@@ -101,7 +95,7 @@ function PlayerRow({ groupe, nom, commentaire, serverPaiement, onDelete }: Playe
 }
 
 export function EntrainementsPage() {
-  const { data, isLoading } = useEntrainements();
+  const { data, isLoading, error } = useEntrainements();
   const { mutateAsync: addPlayer, isPending: adding } = useAddPlayer();
   const { mutate: deletePlayer } = useDeletePlayer();
   const { toasts, addToast, removeToast } = useToast();
@@ -117,7 +111,13 @@ export function EntrainementsPage() {
   };
 
   if (isLoading) return <div className="flex h-full items-center justify-center text-[12px] text-ink-45">Chargement…</div>;
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="flex h-full items-center justify-center px-8 text-center text-[12px] text-ink-55">
+        {error instanceof Error ? error.message : 'Liste des entraînements indisponible'}
+      </div>
+    );
+  }
 
   const { groups, groupOrder } = data;
 
@@ -128,7 +128,7 @@ export function EntrainementsPage() {
       <div className="flex-1 overflow-y-auto no-scrollbar px-[22px] py-3.5">
         {groupOrder.map((groupe) => {
           const players = groups[groupe] ?? [];
-          const paidCount = players.filter((p) => getPayStatus(groupe, p.nom, p.paiement as PayStatus | undefined) === 'paid').length;
+          const paidCount = players.filter((p) => p.paiement === 'paid').length;
           const isOpen = openGroups.has(groupe);
 
           return (
@@ -157,12 +157,14 @@ export function EntrainementsPage() {
                     ) : (
                       players.map((p) => (
                         <PlayerRow
-                          key={p.nom}
+                          key={p.id}
                           groupe={groupe}
+                          id={p.id}
                           nom={p.nom}
                           commentaire={p.commentaire}
-                          serverPaiement={p.paiement as PayStatus | undefined}
-                          onDelete={() => deletePlayer({ groupe, nom: p.nom })}
+                          paiement={p.paiement}
+                          onError={(msg) => addToast(msg, 'error')}
+                          onDelete={() => deletePlayer({ groupe, id: p.id }, { onError: (e) => addToast(e.message, 'error') })}
                         />
                       ))
                     )}
@@ -185,7 +187,7 @@ export function EntrainementsPage() {
                 await addPlayer({ groupe: addCtx, nom, commentaire });
                 addToast(`${nom} ajouté`, 'success');
                 setAddCtx(null);
-              } catch { addToast('Erreur', 'error'); }
+              } catch (e) { addToast(e instanceof Error ? e.message : 'Erreur', 'error'); }
             }}
           />
         )}

@@ -85,14 +85,14 @@ export interface TShirtItem {
   quantite: number;
 }
 
+export type PayStatus = 'pending' | 'paid' | 'unpaid';
+
 export interface TrainingPlayer {
+  /** Stable key from the server — two players can share a name inside a group. */
+  id: string;
   nom: string;
   commentaire?: string;
-  paiement?: 'pending' | 'paid' | 'unpaid';
-}
-
-export interface TrainingGroup {
-  [groupe: string]: TrainingPlayer[];
+  paiement: PayStatus;
 }
 
 export interface ReassortEntry {

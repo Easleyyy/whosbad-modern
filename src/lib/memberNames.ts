@@ -1,8 +1,8 @@
 import { fold } from './text';
 
-// Pure helpers for adhérent names — shared by the app and the Netlify function
-// that stores the shared list (netlify/lib/adherentsApi.ts), so both sides agree
-// on what "the same person" and "Prénom NOM" mean.
+// Pure helpers for adhérent names — shared by the app and the backend route that stores the
+// shared list (netlify/lib/adherentsRoutes.ts), so both sides agree on what "the same person"
+// and "Prénom NOM" mean.
 
 /** Comparison key: accent/case/hyphen-insensitive so "Jean-Pierre Dupont" = "jean pierre DUPONT". */
 export function memberKey(name: string): string {

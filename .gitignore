@@ -7,9 +7,7 @@ dist/
 
 # Local Netlify folder
 .netlify
-
-# Dev-only data (npm run dev's stand-in for the Netlify Blobs store)
-.dev-data/
+deno.lock
 
 # Local Claude Code permission overrides
 .claude/settings.local.json

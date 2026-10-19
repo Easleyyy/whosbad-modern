@@ -1,20 +1,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { memberKey } from '@/lib/memberNames';
+import { AUTH_HEADERS } from '@/lib/apiSecret';
 
 export * from '@/lib/memberNames';
 
 // ─── Shared list client ─────────────────────────────────────────────────────
-// The list lives on the server (Netlify Function + Blobs, see netlify/), so a name
-// added from the phone shows up on the desktop and vice-versa. Same-origin, so no
-// CORS and no dependency on the Render backend.
+// The list lives in Postgres behind netlify/functions/api.mts (table `members`), so a name
+// added from the phone shows up on the desktop and vice-versa. Same-origin, so no CORS.
 
 const ENDPOINT = '/api/adherents';
 
 async function call(init?: RequestInit): Promise<string[]> {
   const res = await fetch(ENDPOINT, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json', ...AUTH_HEADERS, ...init?.headers },
   });
   // A static host answers unknown paths with index.html (200) — treat anything that
   // isn't our JSON shape as "endpoint not there", so callers can fall back cleanly.
